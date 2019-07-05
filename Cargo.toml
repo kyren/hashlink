@@ -1,5 +1,5 @@
 [package]
-name = "linked-hash-containers"
+name = "hashlink"
 version = "0.1.0"
 authors = ["kyren <kerriganw@gmail.com>"]
 edition = "2018"
