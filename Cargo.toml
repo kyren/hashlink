@@ -3,6 +3,7 @@ name = "hashlink"
 version = "0.1.0"
 authors = ["kyren <kerriganw@gmail.com>"]
 edition = "2018"
+license = "MIT or APACHE"
 
 [dependencies]
 hashbrown = "0.5.0"

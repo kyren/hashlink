@@ -1,4 +1,4 @@
-use linked_hash_containers::{LinkedHashMap, Entry};
+use hashlink::{LinkedHashMap, Entry};
 
 #[test]
 fn test_index() {

@@ -32,3 +32,14 @@ should also have `LinkedHashSet` and a `LruCahe` wrapper type.
 This library contains a decent amount of unsafe code from handling its internal
 linked list.  Probably do not use this for anything important until I and others
 have had more time to carefully review it.
+
+## License
+
+This library is licensed the same as
+[linked-hash-map](https://github.com/contain-rs/linked-hash-map), it is licensed
+under either of:
+
+* MIT license [LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT
+* Apache License 2.0 [LICENSE-APACHE](LICENSE-APACHE) or https://opensource.org/licenses/Apache-2.0
+
+at your option.
