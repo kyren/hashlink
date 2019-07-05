@@ -1,4 +1,4 @@
-use hashlink::{LinkedHashMap, Entry};
+use hashlink::{Entry, LinkedHashMap};
 
 #[test]
 fn test_index() {
@@ -155,11 +155,15 @@ fn test_iter() {
 
 #[test]
 fn test_borrow() {
-    #[derive(PartialEq, Eq, Hash)] struct Foo(Bar);
-    #[derive(PartialEq, Eq, Hash)] struct Bar(i32);
+    #[derive(PartialEq, Eq, Hash)]
+    struct Foo(Bar);
+    #[derive(PartialEq, Eq, Hash)]
+    struct Bar(i32);
 
     impl ::std::borrow::Borrow<Bar> for Foo {
-        fn borrow(&self) -> &Bar { &self.0 }
+        fn borrow(&self) -> &Bar {
+            &self.0
+        }
     }
 
     let mut map = LinkedHashMap::new();

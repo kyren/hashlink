@@ -1,10 +1,10 @@
 use std::{
     borrow::Borrow,
     hash::{BuildHasher, Hash, Hasher},
+    marker,
     mem::{self, MaybeUninit},
     ops::{Index, IndexMut},
     ptr,
-    marker,
 };
 
 use hashbrown::{hash_map, HashMap};
@@ -184,7 +184,7 @@ where
             RawEntryMut::Occupied(mut occupied) => {
                 occupied.to_back();
                 Some(occupied.insert(v))
-            },
+            }
             RawEntryMut::Vacant(vacant) => {
                 vacant.insert(k, v);
                 None
@@ -278,7 +278,10 @@ impl<K, V, S> Drop for LinkedHashMap<K, V, S> {
 }
 
 impl<'a, K, V, S, Q: ?Sized> Index<&'a Q> for LinkedHashMap<K, V, S>
-    where K: Hash + Eq + Borrow<Q>, S: BuildHasher, Q: Eq + Hash
+where
+    K: Hash + Eq + Borrow<Q>,
+    S: BuildHasher,
+    Q: Eq + Hash,
 {
     type Output = V;
 
@@ -288,7 +291,10 @@ impl<'a, K, V, S, Q: ?Sized> Index<&'a Q> for LinkedHashMap<K, V, S>
 }
 
 impl<'a, K, V, S, Q: ?Sized> IndexMut<&'a Q> for LinkedHashMap<K, V, S>
-    where K: Hash + Eq + Borrow<Q>, S: BuildHasher, Q: Eq + Hash
+where
+    K: Hash + Eq + Borrow<Q>,
+    S: BuildHasher,
+    Q: Eq + Hash,
 {
     fn index_mut(&mut self, index: &'a Q) -> &mut V {
         self.get_mut(index).expect("no entry found for key")
@@ -304,7 +310,7 @@ impl<K: Hash + Eq + Clone, V: Clone, S: BuildHasher + Clone> Clone for LinkedHas
 }
 
 impl<K: Hash + Eq, V, S: BuildHasher> Extend<(K, V)> for LinkedHashMap<K, V, S> {
-    fn extend<I: IntoIterator<Item=(K, V)>>(&mut self, iter: I) {
+    fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
         for (k, v) in iter {
             self.insert(k, v);
         }
@@ -778,7 +784,9 @@ impl<'a, K, V> DoubleEndedIterator for Iter<'a, K, V> {
 }
 
 impl<'a, K, V> ExactSizeIterator for Iter<'a, K, V> {
-    fn len(&self) -> usize { self.remaining }
+    fn len(&self) -> usize {
+        self.remaining
+    }
 }
 
 // A ZST that asserts that the inner HashMap will not do its own key hashing
