@@ -8,7 +8,7 @@ use hashbrown::hash_map;
 use crate::linked_hash_map::{self, LinkedHashMap};
 
 pub use crate::linked_hash_map::{
-    Drain, Entry, Iter, IterMut, OccupiedEntry, RawEntryBuilder, RawEntryBuilderMut,
+    Drain, Entry, IntoIter, Iter, IterMut, OccupiedEntry, RawEntryBuilder, RawEntryBuilderMut,
     RawOccupiedEntryMut, RawVacantEntryMut, VacantEntry,
 };
 
@@ -176,10 +176,10 @@ impl<K: Eq + Hash, V, S: BuildHasher> Extend<(K, V)> for LruCache<K, V, S> {
 
 impl<K: Eq + Hash, V, S: BuildHasher> IntoIterator for LruCache<K, V, S> {
     type Item = (K, V);
-    type IntoIter = Drain<K, V>;
+    type IntoIter = IntoIter<K, V>;
 
     #[inline]
-    fn into_iter(self) -> Drain<K, V> {
+    fn into_iter(self) -> IntoIter<K, V> {
         self.map.into_iter()
     }
 }

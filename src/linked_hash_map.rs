@@ -131,26 +131,23 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
     }
 
     #[inline]
-    pub fn drain(&mut self) -> Drain<K, V> {
+    pub fn drain(&mut self) -> Drain<'_, K, V> {
         unsafe {
             let (head, tail) = if !self.values.is_null() {
-                ((*self.values).next, (*self.values).prev)
+                let next = (*self.values).next;
+                let prev = (*self.values).prev;
+                (*self.values).next = self.values;
+                (*self.values).prev = self.values;
+                (next, prev)
             } else {
                 (ptr::null_mut(), ptr::null_mut())
             };
             let len = self.len();
 
-            if !self.values.is_null() {
-                Box::from_raw(self.values);
-                self.values = ptr::null_mut();
-            }
-
-            drop_free_nodes(self.free);
-            self.free = ptr::null_mut();
-
             self.map.clear();
 
             Drain {
+                free: &mut self.free,
                 head,
                 tail,
                 remaining: len,
@@ -975,7 +972,15 @@ pub struct IterMut<'a, K, V> {
     marker: PhantomData<(&'a K, &'a mut V)>,
 }
 
-pub struct Drain<K, V> {
+pub struct IntoIter<K, V> {
+    head: *mut Node<K, V>,
+    tail: *mut Node<K, V>,
+    remaining: usize,
+    marker: PhantomData<(K, V)>,
+}
+
+pub struct Drain<'a, K, V> {
+    free: &'a mut *mut Node<K, V>,
     head: *mut Node<K, V>,
     tail: *mut Node<K, V>,
     remaining: usize,
@@ -996,7 +1001,14 @@ where
 {
 }
 
-unsafe impl<K, V> Send for Drain<K, V>
+unsafe impl<K, V> Send for IntoIter<K, V>
+where
+    K: Send,
+    V: Send,
+{
+}
+
+unsafe impl<'a, K, V> Send for Drain<'a, K, V>
 where
     K: Send,
     V: Send,
@@ -1017,7 +1029,14 @@ where
 {
 }
 
-unsafe impl<K, V> Sync for Drain<K, V>
+unsafe impl<K, V> Sync for IntoIter<K, V>
+where
+    K: Sync,
+    V: Sync,
+{
+}
+
+unsafe impl<'a, K, V> Sync for Drain<'a, K, V>
 where
     K: Sync,
     V: Sync,
@@ -1077,7 +1096,7 @@ impl<'a, K, V> Iterator for IterMut<'a, K, V> {
     }
 }
 
-impl<K, V> Iterator for Drain<K, V> {
+impl<K, V> Iterator for IntoIter<K, V> {
     type Item = (K, V);
 
     #[inline]
@@ -1091,6 +1110,31 @@ impl<K, V> Iterator for Drain<K, V> {
             let mut e = *Box::from_raw(self.head);
             self.head = next;
             Some((e.take_key(), e.take_value()))
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining, Some(self.remaining))
+    }
+}
+
+impl<'a, K, V> Iterator for Drain<'a, K, V> {
+    type Item = (K, V);
+
+    #[inline]
+    fn next(&mut self) -> Option<(K, V)> {
+        if self.remaining == 0 {
+            return None;
+        }
+        self.remaining -= 1;
+        unsafe {
+            let key = (*self.head).take_key();
+            let value = (*self.head).take_value();
+            let next = (*self.head).next;
+            push_free(self.free, self.head);
+            self.head = next;
+            Some((key, value))
         }
     }
 
@@ -1130,7 +1174,7 @@ impl<'a, K, V> DoubleEndedIterator for IterMut<'a, K, V> {
     }
 }
 
-impl<K, V> DoubleEndedIterator for Drain<K, V> {
+impl<K, V> DoubleEndedIterator for IntoIter<K, V> {
     #[inline]
     fn next_back(&mut self) -> Option<(K, V)> {
         if self.remaining == 0 {
@@ -1146,13 +1190,31 @@ impl<K, V> DoubleEndedIterator for Drain<K, V> {
     }
 }
 
+impl<'a, K, V> DoubleEndedIterator for Drain<'a, K, V> {
+    #[inline]
+    fn next_back(&mut self) -> Option<(K, V)> {
+        if self.remaining == 0 {
+            return None;
+        }
+        self.remaining -= 1;
+        unsafe {
+            let key = (*self.tail).take_key();
+            let value = (*self.tail).take_value();
+            let prev = (*self.tail).prev;
+            push_free(self.free, self.tail);
+            self.tail = prev;
+            Some((key, value))
+        }
+    }
+}
+
 impl<'a, K, V> ExactSizeIterator for Iter<'a, K, V> {}
 
 impl<'a, K, V> ExactSizeIterator for IterMut<'a, K, V> {}
 
-impl<K, V> ExactSizeIterator for Drain<K, V> {}
+impl<K, V> ExactSizeIterator for IntoIter<K, V> {}
 
-impl<K, V> Drop for Drain<K, V> {
+impl<K, V> Drop for IntoIter<K, V> {
     #[inline]
     fn drop(&mut self) {
         for _ in 0..self.remaining {
@@ -1161,6 +1223,21 @@ impl<K, V> Drop for Drain<K, V> {
                 (*self.tail).take_key();
                 (*self.tail).take_value();
                 Box::from_raw(self.tail);
+                self.tail = prev;
+            }
+        }
+    }
+}
+
+impl<'a, K, V> Drop for Drain<'a, K, V> {
+    #[inline]
+    fn drop(&mut self) {
+        for _ in 0..self.remaining {
+            unsafe {
+                let prev = (*self.tail).prev;
+                (*self.tail).take_key();
+                (*self.tail).take_value();
+                push_free(self.free, self.tail);
                 self.tail = prev;
             }
         }
@@ -1288,11 +1365,36 @@ impl<'a, K: Hash + Eq, V, S: BuildHasher> IntoIterator for &'a mut LinkedHashMap
 
 impl<K: Hash + Eq, V, S: BuildHasher> IntoIterator for LinkedHashMap<K, V, S> {
     type Item = (K, V);
-    type IntoIter = Drain<K, V>;
+    type IntoIter = IntoIter<K, V>;
 
     #[inline]
-    fn into_iter(mut self) -> Drain<K, V> {
-        self.drain()
+    fn into_iter(mut self) -> IntoIter<K, V> {
+        unsafe {
+            let (head, tail) = if !self.values.is_null() {
+                let head = (*self.values).next;
+                let tail = (*self.values).prev;
+
+                Box::from_raw(self.values);
+                self.values = ptr::null_mut();
+
+                (head, tail)
+            } else {
+                (ptr::null_mut(), ptr::null_mut())
+            };
+            let len = self.len();
+
+            drop_free_nodes(self.free);
+            self.free = ptr::null_mut();
+
+            self.map.clear();
+
+            IntoIter {
+                head,
+                tail,
+                remaining: len,
+                marker: PhantomData,
+            }
+        }
     }
 }
 

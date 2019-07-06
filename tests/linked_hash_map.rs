@@ -337,35 +337,54 @@ fn test_into_iter_drop() {
 
 #[test]
 fn test_drain() {
-    struct Counter<'a>(&'a mut usize);
+    use std::{cell::Cell, rc::Rc};
 
-    impl<'a> Drop for Counter<'a> {
+    struct Counter(Rc<Cell<u32>>);
+
+    impl<'a> Drop for Counter {
         fn drop(&mut self) {
-            *self.0 += 1;
+            self.0.set(self.0.get() + 1);
         }
     }
 
-    let mut a = 0;
-    let mut b = 0;
-    let mut c = 0;
+    let mut map = LinkedHashMap::new();
 
-    {
-        let mut map = LinkedHashMap::new();
-        map.insert("a", Counter(&mut a));
-        map.insert("b", Counter(&mut b));
-        map.insert("c", Counter(&mut c));
+    let a = Rc::new(Cell::new(0));
+    let b = Rc::new(Cell::new(0));
+    let c = Rc::new(Cell::new(0));
 
-        let mut iter = map.drain();
-        assert_eq!(iter.next().map(|p| p.0), Some("a"));
-        assert_eq!(iter.next_back().map(|p| p.0), Some("c"));
+    map.insert("a", Counter(a.clone()));
+    map.insert("b", Counter(b.clone()));
+    map.insert("c", Counter(c.clone()));
 
-        drop(iter);
-        assert_eq!(map.len(), 0);
-    }
+    let mut iter = map.drain();
+    assert_eq!(iter.next().map(|p| p.0), Some("a"));
+    assert_eq!(iter.next_back().map(|p| p.0), Some("c"));
 
-    assert_eq!(a, 1);
-    assert_eq!(b, 1);
-    assert_eq!(c, 1);
+    drop(iter);
+    assert_eq!(map.len(), 0);
+
+    assert_eq!(a.get(), 1);
+    assert_eq!(b.get(), 1);
+    assert_eq!(c.get(), 1);
+
+    map.insert("a", Counter(a.clone()));
+    map.insert("b", Counter(b.clone()));
+    map.insert("c", Counter(c.clone()));
+
+    let mut iter = map.drain();
+    assert_eq!(iter.next().map(|p| p.0), Some("a"));
+    assert_eq!(iter.next_back().map(|p| p.0), Some("c"));
+    assert_eq!(iter.next_back().map(|p| p.0), Some("b"));
+    assert!(iter.next().is_none());
+    assert!(iter.next_back().is_none());
+
+    drop(iter);
+    assert_eq!(map.len(), 0);
+
+    assert_eq!(a.get(), 2);
+    assert_eq!(b.get(), 2);
+    assert_eq!(c.get(), 2);
 }
 
 #[test]
