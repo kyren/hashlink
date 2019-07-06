@@ -196,111 +196,6 @@ fn test_borrow() {
     assert_eq!(map.remove(&Foo(Bar(2))), None);
 }
 
-/*
-#[test]
-fn test_entries_replacing() {
-    let mut map = LinkedHashMap::new();
-    map.insert("a", 10);
-
-    {
-        let mut iter = map.entries();
-        let mut entry = iter.next().unwrap();
-        assert_eq!(entry.insert(20), 10);
-        assert!(iter.next().is_none());
-    }
-
-    assert_eq!(map["a"], 20);
-}
-
-#[test]
-fn test_entries_remove() {
-    let mut map = LinkedHashMap::new();
-    map.insert("a", 10);
-    map.insert("b", 20);
-    map.insert("c", 30);
-    map.insert("d", 40);
-
-    // remove middle
-    {
-        let mut iter = map.entries();
-        iter.next().unwrap();
-        let b = iter.next().unwrap();
-        assert_eq!(*b.key(), "b");
-        assert_eq!(b.remove(), 20);
-        assert_eq!(*iter.next().unwrap().key(), "c");
-    }
-
-    assert_eq!(map.len(), 3);
-    assert_eq!(map["a"], 10);
-    assert_eq!(map["c"], 30);
-    assert_eq!(map["d"], 40);
-
-    // remove first
-    {
-        let mut iter = map.entries();
-        let a = iter.next().unwrap();
-        assert_eq!(*a.key(), "a");
-        assert_eq!(a.remove(), 10);
-    }
-
-    assert_eq!(map.len(), 2);
-    assert_eq!(map["c"], 30);
-    assert_eq!(map["d"], 40);
-
-    // remove last
-    {
-        let mut iter = map.entries();
-        iter.next().unwrap();
-        let d = iter.next().unwrap();
-        assert_eq!(*d.key(), "d");
-        assert_eq!(d.remove(), 40);
-        assert!(iter.next().is_none());
-    }
-
-    assert_eq!(map.len(), 1);
-    assert_eq!(map["c"], 30);
-
-    // remove only
-    {
-        let mut iter = map.entries();
-        let c = iter.next().unwrap();
-        assert_eq!(*c.key(), "c");
-        assert_eq!(c.remove(), 30);
-    }
-
-    assert!(map.is_empty());
-}
-#[test]
-fn entries_insert() {
-    let mut map = LinkedHashMap::new();
-    map.insert(0, 0);
-    map.insert(1, 1);
-
-    let mut iter = map.entries();
-
-    iter.next().unwrap().insert(0);
-    iter.next().unwrap(); // 1
-    assert!(iter.next().is_none());
-}
-
-#[test]
-fn test_debug() {
-    let mut map = LinkedHashMap::new();
-    assert_eq!(format!("{:?}", map), "{}");
-    map.insert(1, 10);
-    map.insert(2, 20);
-    map.insert(3, 30);
-    assert_eq!(format!("{:?}", map), "{1: 10, 2: 20, 3: 30}");
-    map.insert(2, 22);
-    assert_eq!(format!("{:?}", map), "{1: 10, 3: 30, 2: 22}");
-    map.get(&3);
-    assert_eq!(format!("{:?}", map), "{1: 10, 3: 30, 2: 22}");
-    map.get_refresh(&mut 3);
-    assert_eq!(format!("{:?}", map), "{1: 10, 2: 22, 3: 30}");
-    map.clear();
-    assert_eq!(format!("{:?}", map), "{}");
-}
-
 #[test]
 fn test_iter_mut() {
     let mut map = LinkedHashMap::new();
@@ -342,14 +237,10 @@ fn test_consuming_iter() {
 
     let mut iter = map.into_iter();
     assert_eq!(Some(("a", 10)), iter.next());
-
-    let clone = iter.clone();
-    for iter in &mut [iter, clone] {
-        assert_eq!(Some(("b", 20)), iter.next_back());
-        assert_eq!(1, iter.len());
-        assert_eq!(Some(("c", 30)), iter.next());
-        assert_eq!(None, iter.next());
-    }
+    assert_eq!(Some(("b", 20)), iter.next_back());
+    assert_eq!(1, iter.len());
+    assert_eq!(Some(("c", 30)), iter.next());
+    assert_eq!(None, iter.next());
 }
 
 #[test]
@@ -357,8 +248,6 @@ fn test_consuming_iter_empty() {
     let map = LinkedHashMap::<&str, i32>::new();
     let mut iter = map.into_iter();
     assert_eq!(None, iter.next());
-    let mut clone = iter.clone();
-    assert_eq!(None, clone.next());
 }
 
 #[test]
@@ -406,15 +295,50 @@ fn test_into_iter_drop() {
 }
 
 #[test]
+fn test_drain() {
+    struct Counter<'a>(&'a mut usize);
+
+    impl<'a> Drop for Counter<'a> {
+        fn drop(&mut self) {
+            *self.0 += 1;
+        }
+    }
+
+    let mut a = 0;
+    let mut b = 0;
+    let mut c = 0;
+
+    {
+        let mut map = LinkedHashMap::new();
+        map.insert("a", Counter(&mut a));
+        map.insert("b", Counter(&mut b));
+        map.insert("c", Counter(&mut c));
+
+        let mut iter = map.drain();
+        iter.next();
+        iter.next_back();
+
+        drop(iter);
+        assert_eq!(map.len(), 0);
+    }
+
+    assert_eq!(a, 1);
+    assert_eq!(b, 1);
+    assert_eq!(c, 1);
+}
+
+#[test]
 fn test_send_sync() {
     fn is_send_sync<T: Send + Sync>() {}
 
     is_send_sync::<LinkedHashMap<u32, i32>>();
-    is_send_sync::<linked_hash_containers::Entry<u32, i32, ()>>();
-    // is_send_sync::<linked_hash_containers::Iter<u32, i32>>();
-    // is_send_sync::<linked_hash_containers::IterMut<u32, i32>>();
-    // is_send_sync::<linked_hash_containers::IntoIter<u32, i32>>();
-    // is_send_sync::<linked_hash_containers::Keys<u32, i32>>();
-    // is_send_sync::<linked_hash_containers::Values<u32, i32>>();
+    is_send_sync::<hashlink::Entry<u32, i32, ()>>();
+    is_send_sync::<hashlink::RawEntryBuilder<u32, i32, ()>>();
+    is_send_sync::<hashlink::RawEntryBuilderMut<u32, i32, ()>>();
+    is_send_sync::<hashlink::RawEntryMut<u32, i32, ()>>();
+    is_send_sync::<hashlink::Iter<u32, i32>>();
+    is_send_sync::<hashlink::IterMut<u32, i32>>();
+    is_send_sync::<hashlink::Drain<u32, i32>>();
+    is_send_sync::<hashlink::Keys<u32, i32>>();
+    is_send_sync::<hashlink::Values<u32, i32>>();
 }
-*/
