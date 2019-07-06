@@ -1277,7 +1277,6 @@ impl<'a, K, V> ExactSizeIterator for Keys<'a, K, V> {
     }
 }
 
-/// An insertion-order iterator over a `LinkedHashMap`'s values.
 #[derive(Clone)]
 pub struct Values<'a, K, V> {
     inner: Iter<'a, K, V>,
