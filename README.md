@@ -26,12 +26,13 @@ let cached_val = match lru_cache.entry("key") {
 };
 ```
 
-Right now is extremely WIP and only contains `LinkedHashMap`, but eventually it
-should also have `LinkedHashSet` and a `LruCahe` wrapper type.
+Right now this crate is still WIP, but has a working `LinkedHashMap` and a
+`LruCache` wrapper type.  Eventually this crate will also have a `LinkedHashSet`
+implementation.
 
-This library contains a decent amount of unsafe code from handling its internal
-linked list.  Probably do not use this for anything important until I and others
-have had more time to carefully review it.
+This crate contains a decent amount of unsafe code from handling its internal
+linked list.  Probably do not use this for anything important until I and more
+importantly others have had more time to carefully review it.
 
 ## License
 
