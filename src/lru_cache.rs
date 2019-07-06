@@ -1,6 +1,5 @@
 use std::{
-    borrow::{Borrow, ToOwned},
-    fmt,
+    borrow::Borrow,
     hash::{BuildHasher, Hash},
 };
 
@@ -8,8 +7,7 @@ use hashbrown::hash_map;
 
 use crate::linked_hash_map::{self, LinkedHashMap};
 
-#[derive(Clone)]
-pub struct LruCache<K: Eq + Hash, V, S: BuildHasher = hash_map::DefaultHashBuilder> {
+pub struct LruCache<K, V, S = hash_map::DefaultHashBuilder> {
     map: LinkedHashMap<K, V, S>,
     max_size: usize,
 }
@@ -24,7 +22,9 @@ impl<K: Eq + Hash, V> LruCache<K, V> {
     }
 }
 
-impl<K: Eq + Hash, V, S: BuildHasher> LruCache<K, V, S> {
+impl<K: Eq + Hash, V, S> LruCache<K, V, S>
+    where S: BuildHasher
+{
     #[inline]
     pub fn with_hasher(capacity: usize, hash_builder: S) -> Self {
         LruCache {
@@ -66,36 +66,29 @@ impl<K: Eq + Hash, V, S: BuildHasher> LruCache<K, V, S> {
         }
     }
 
+    /// If the returned entry is vacant, it will always have room to insert a single value.  By
+    /// using the entry API, you can exceed the configured capacity by 1.
     #[inline]
-    pub fn produce<Q, F>(&mut self, k: &Q, f: F) -> &mut V
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq + ToOwned<Owned = K> + ?Sized,
-        F: FnOnce() -> V,
-    {
-        match self.map.raw_entry_mut().from_key(k) {
-            linked_hash_map::RawEntryMut::Occupied(mut occupied) => {
-                occupied.to_back();
-                occupied.into_mut()
-            }
-            linked_hash_map::RawEntryMut::Vacant(vacant) => vacant.insert(k.to_owned(), f()).1,
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V, S> {
+        if self.len() > self.capacity() {
+            self.remove_lru();
         }
+        self.map.entry(key)
     }
 
     #[inline]
-    pub fn produce_err<Q, F, E>(&mut self, k: &Q, f: F) -> Result<&mut V, E>
-    where
-        K: Borrow<Q>,
-        Q: Hash + Eq + ToOwned<Owned = K> + ?Sized,
-        F: FnOnce() -> Result<V, E>,
-    {
-        Ok(match self.map.raw_entry_mut().from_key(k) {
-            linked_hash_map::RawEntryMut::Occupied(mut occupied) => {
-                occupied.to_back();
-                occupied.into_mut()
-            }
-            linked_hash_map::RawEntryMut::Vacant(vacant) => vacant.insert(k.to_owned(), f()?).1,
-        })
+    pub fn raw_entry(&self) -> RawEntryBuilder<'_, K, V, S> {
+        self.map.raw_entry()
+    }
+
+    /// If the returned entry is vacant, it will always have room to insert a single value.  By
+    /// using the entry API, you can exceed the configured capacity by 1.
+    #[inline]
+    pub fn raw_entry_mut(&mut self) -> RawEntryBuilderMut<'_, K, V, S> {
+        if self.len() > self.capacity() {
+            self.remove_lru();
+        }
+        self.map.raw_entry_mut()
     }
 
     #[inline]
@@ -142,17 +135,27 @@ impl<K: Eq + Hash, V, S: BuildHasher> LruCache<K, V, S> {
 
     #[inline]
     pub fn iter(&self) -> Iter<K, V> {
-        Iter(self.map.iter())
+        self.map.iter()
     }
 
     #[inline]
     pub fn iter_mut(&mut self) -> IterMut<K, V> {
-        IterMut(self.map.iter_mut())
+        self.map.iter_mut()
     }
 
     #[inline]
     pub fn drain(&mut self) -> Drain<K, V> {
-        Drain(self.map.drain())
+        self.map.drain()
+    }
+}
+
+impl<K: Hash + Eq + Clone, V: Clone, S: BuildHasher + Clone> Clone for LruCache<K, V, S> {
+    #[inline]
+    fn clone(&self) -> Self {
+        LruCache {
+            map: self.map.clone(),
+            max_size: self.max_size,
+        }
     }
 }
 
@@ -165,20 +168,13 @@ impl<K: Eq + Hash, V, S: BuildHasher> Extend<(K, V)> for LruCache<K, V, S> {
     }
 }
 
-impl<K: fmt::Debug + Eq + Hash, V: fmt::Debug, S: BuildHasher> fmt::Debug for LruCache<K, V, S> {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_map().entries(self.iter().rev()).finish()
-    }
-}
-
 impl<K: Eq + Hash, V, S: BuildHasher> IntoIterator for LruCache<K, V, S> {
     type Item = (K, V);
     type IntoIter = Drain<K, V>;
 
     #[inline]
     fn into_iter(self) -> Drain<K, V> {
-        Drain(self.map.into_iter())
+        self.map.into_iter()
     }
 }
 
@@ -202,84 +198,13 @@ impl<'a, K: Eq + Hash, V, S: BuildHasher> IntoIterator for &'a mut LruCache<K, V
     }
 }
 
-pub struct Drain<K, V>(linked_hash_map::Drain<K, V>);
-
-impl<K, V> Iterator for Drain<K, V> {
-    type Item = (K, V);
-
-    #[inline]
-    fn next(&mut self) -> Option<(K, V)> {
-        self.0.next()
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.0.size_hint()
-    }
-}
-
-impl<K, V> DoubleEndedIterator for Drain<K, V> {
-    #[inline]
-    fn next_back(&mut self) -> Option<(K, V)> {
-        self.0.next_back()
-    }
-}
-
-impl<K, V> ExactSizeIterator for Drain<K, V> {}
-
-pub struct Iter<'a, K: 'a, V: 'a>(linked_hash_map::Iter<'a, K, V>);
-
-impl<'a, K, V> Clone for Iter<'a, K, V> {
-    #[inline]
-    fn clone(&self) -> Iter<'a, K, V> {
-        Iter(self.0.clone())
-    }
-}
-
-impl<'a, K, V> Iterator for Iter<'a, K, V> {
-    type Item = (&'a K, &'a V);
-
-    #[inline]
-    fn next(&mut self) -> Option<(&'a K, &'a V)> {
-        self.0.next()
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.0.size_hint()
-    }
-}
-
-impl<'a, K, V> DoubleEndedIterator for Iter<'a, K, V> {
-    #[inline]
-    fn next_back(&mut self) -> Option<(&'a K, &'a V)> {
-        self.0.next_back()
-    }
-}
-
-impl<'a, K, V> ExactSizeIterator for Iter<'a, K, V> {}
-
-pub struct IterMut<'a, K: 'a, V: 'a>(linked_hash_map::IterMut<'a, K, V>);
-
-impl<'a, K, V> Iterator for IterMut<'a, K, V> {
-    type Item = (&'a K, &'a mut V);
-
-    #[inline]
-    fn next(&mut self) -> Option<(&'a K, &'a mut V)> {
-        self.0.next()
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.0.size_hint()
-    }
-}
-
-impl<'a, K, V> DoubleEndedIterator for IterMut<'a, K, V> {
-    #[inline]
-    fn next_back(&mut self) -> Option<(&'a K, &'a mut V)> {
-        self.0.next_back()
-    }
-}
-
-impl<'a, K, V> ExactSizeIterator for IterMut<'a, K, V> {}
+pub type Drain<K, V> = linked_hash_map::Drain<K, V>;
+pub type Iter<'a, K, V> = linked_hash_map::Iter<'a, K, V>;
+pub type IterMut<'a, K, V> = linked_hash_map::IterMut<'a, K, V>;
+pub type Entry<'a, K, V, S> = linked_hash_map::Entry<'a, K, V, S>;
+pub type OccupiedEntry<'a, K, V> = linked_hash_map::OccupiedEntry<'a, K, V>;
+pub type VacantEntry<'a, K, V, S> = linked_hash_map::VacantEntry<'a, K, V, S>;
+pub type RawEntryBuilder<'a, K, V, S> = linked_hash_map::RawEntryBuilder<'a, K, V, S>;
+pub type RawEntryBuilderMut<'a, K, V, S> = linked_hash_map::RawEntryBuilderMut<'a, K, V, S>;
+pub type RawOccupiedEntryMut<'a, K, V> = linked_hash_map::RawOccupiedEntryMut<'a, K, V>;
+pub type RawlVacantEntryMut<'a, K, V, S> = linked_hash_map::RawVacantEntryMut<'a, K, V, S>;

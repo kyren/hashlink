@@ -197,6 +197,10 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
             Some(((*back).key_ref(), (*back).value_ref()))
         }
     }
+
+    pub fn hasher(&self) -> &S {
+        &self.hash_builder
+    }
 }
 
 impl<K, V, S> LinkedHashMap<K, V, S>
