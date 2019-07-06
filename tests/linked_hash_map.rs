@@ -1,4 +1,7 @@
-use hashlink::{Entry, LinkedHashMap};
+use hashlink::{
+    linked_hash_map::{self, Entry},
+    LinkedHashMap,
+};
 
 #[test]
 fn test_index() {
@@ -370,13 +373,13 @@ fn test_send_sync() {
     fn is_send_sync<T: Send + Sync>() {}
 
     is_send_sync::<LinkedHashMap<u32, i32>>();
-    is_send_sync::<hashlink::Entry<u32, i32, ()>>();
-    is_send_sync::<hashlink::RawEntryBuilder<u32, i32, ()>>();
-    is_send_sync::<hashlink::RawEntryBuilderMut<u32, i32, ()>>();
-    is_send_sync::<hashlink::RawEntryMut<u32, i32, ()>>();
-    is_send_sync::<hashlink::Iter<u32, i32>>();
-    is_send_sync::<hashlink::IterMut<u32, i32>>();
-    is_send_sync::<hashlink::Drain<u32, i32>>();
-    is_send_sync::<hashlink::Keys<u32, i32>>();
-    is_send_sync::<hashlink::Values<u32, i32>>();
+    is_send_sync::<linked_hash_map::Entry<u32, i32, ()>>();
+    is_send_sync::<linked_hash_map::RawEntryBuilder<u32, i32, ()>>();
+    is_send_sync::<linked_hash_map::RawEntryBuilderMut<u32, i32, ()>>();
+    is_send_sync::<linked_hash_map::RawEntryMut<u32, i32, ()>>();
+    is_send_sync::<linked_hash_map::Iter<u32, i32>>();
+    is_send_sync::<linked_hash_map::IterMut<u32, i32>>();
+    is_send_sync::<linked_hash_map::Drain<u32, i32>>();
+    is_send_sync::<linked_hash_map::Keys<u32, i32>>();
+    is_send_sync::<linked_hash_map::Values<u32, i32>>();
 }
