@@ -14,10 +14,10 @@ pub struct LinkedHashMap<K, V, S = hash_map::DefaultHashBuilder> {
     // We need to keep any custom hash builder outside of the HashMap so we can access it alongside
     // the entry API without mutable aliasing.
     hash_builder: S,
-    // Circular linked list of nodes.  If `head` is non-null, it will point to a "guard node" which
-    // will never have an initialized key or value, `head.prev` will contain the last key / value in
-    // the list, `head.next` will contain the first key / value in the list.
-    head: *mut Node<K, V>,
+    // Circular linked list of nodes.  If `values` is non-null, it will point to a "guard node"
+    // which will never have an initialized key or value, `values.next` will contain the last key /
+    // value in the list, `values.prev` will contain the first key / value in the list.
+    values: *mut Node<K, V>,
     // *Singly* linked list of free nodes.  The `prev` pointers in the free list should be assumed
     // invalid.
     free: *mut Node<K, V>,
@@ -28,7 +28,7 @@ impl<K, V> LinkedHashMap<K, V> {
         Self {
             hash_builder: hash_map::DefaultHashBuilder::default(),
             map: HashMap::with_hasher(NullHasher),
-            head: ptr::null_mut(),
+            values: ptr::null_mut(),
             free: ptr::null_mut(),
         }
     }
@@ -37,7 +37,7 @@ impl<K, V> LinkedHashMap<K, V> {
         Self {
             hash_builder: hash_map::DefaultHashBuilder::default(),
             map: HashMap::with_capacity_and_hasher(capacity, NullHasher),
-            head: ptr::null_mut(),
+            values: ptr::null_mut(),
             free: ptr::null_mut(),
         }
     }
@@ -48,7 +48,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
         Self {
             hash_builder,
             map: HashMap::with_hasher(NullHasher),
-            head: ptr::null_mut(),
+            values: ptr::null_mut(),
             free: ptr::null_mut(),
         }
     }
@@ -57,7 +57,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
         Self {
             hash_builder,
             map: HashMap::with_capacity_and_hasher(capacity, NullHasher),
-            head: ptr::null_mut(),
+            values: ptr::null_mut(),
             free: ptr::null_mut(),
         }
     }
@@ -82,38 +82,38 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
 
     pub fn clear(&mut self) {
         self.map.clear();
-        if !self.head.is_null() {
+        if !self.values.is_null() {
             unsafe {
-                drop_nodes(self.head);
-                (*self.head).prev = self.head;
-                (*self.head).next = self.head;
+                drop_nodes(self.values);
+                (*self.values).prev = self.values;
+                (*self.values).next = self.values;
             }
         }
     }
 
     pub fn iter(&self) -> Iter<K, V> {
-        let head = if self.head.is_null() {
+        let head = if self.values.is_null() {
             ptr::null_mut()
         } else {
-            unsafe { (*self.head).prev }
+            unsafe { (*self.values).prev }
         };
         Iter {
-            head: head,
-            tail: self.head,
+            head,
+            tail: self.values,
             remaining: self.len(),
             marker: PhantomData,
         }
     }
 
     pub fn iter_mut(&mut self) -> IterMut<K, V> {
-        let head = if self.head.is_null() {
+        let head = if self.values.is_null() {
             ptr::null_mut()
         } else {
-            unsafe { (*self.head).prev }
+            unsafe { (*self.values).prev }
         };
         IterMut {
-            head: head,
-            tail: self.head,
+            head,
+            tail: self.values,
             remaining: self.len(),
             marker: PhantomData,
         }
@@ -121,16 +121,16 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
 
     pub fn drain(&mut self) -> Drain<K, V> {
         unsafe {
-            let (head, tail) = if !self.head.is_null() {
-                ((*self.head).prev, (*self.head).next)
+            let (head, tail) = if !self.values.is_null() {
+                ((*self.values).prev, (*self.values).next)
             } else {
                 (ptr::null_mut(), ptr::null_mut())
             };
             let len = self.len();
 
-            if !self.head.is_null() {
-                Box::from_raw(self.head);
-                self.head = ptr::null_mut();
+            if !self.values.is_null() {
+                Box::from_raw(self.values);
+                self.values = ptr::null_mut();
             }
 
             drop_free_nodes(self.free);
@@ -139,8 +139,8 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
             self.map.clear();
 
             Drain {
-                head: head,
-                tail: tail,
+                head,
+                tail,
                 remaining: len,
                 marker: PhantomData,
             }
@@ -166,7 +166,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
             return None;
         }
         unsafe {
-            let front = (*self.head).prev;
+            let front = (*self.values).prev;
             Some((&*(*front).key.as_ptr(), &*(*front).value.as_ptr()))
         }
     }
@@ -176,7 +176,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
             return None;
         }
         unsafe {
-            let back = (*self.head).next;
+            let back = (*self.values).next;
             Some((&*(*back).key.as_ptr(), &*(*back).value.as_ptr()))
         }
     }
@@ -264,7 +264,7 @@ where
             return None;
         }
         unsafe {
-            let front = (*self.head).prev;
+            let front = (*self.values).prev;
             match self
                 .map
                 .raw_entry_mut()
@@ -284,7 +284,7 @@ where
             return None;
         }
         unsafe {
-            let back = (*self.head).next;
+            let back = (*self.values).next;
             match self
                 .map
                 .raw_entry_mut()
@@ -314,19 +314,27 @@ where
     pub fn raw_entry_mut(&mut self) -> RawEntryBuilderMut<'_, K, V, S> {
         RawEntryBuilderMut {
             hash_builder: &self.hash_builder,
-            head: &mut self.head,
+            values: &mut self.values,
             free: &mut self.free,
             entry: self.map.raw_entry_mut(),
         }
     }
 }
 
+impl<K, V, S> Default for LinkedHashMap<K, V, S>
+    where S: Default
+{
+    fn default() -> Self {
+        Self::with_hasher(S::default())
+    }
+}
+
 impl<K, V, S> Drop for LinkedHashMap<K, V, S> {
     fn drop(&mut self) {
         unsafe {
-            if !self.head.is_null() {
-                drop_nodes(self.head);
-                Box::from_raw(self.head);
+            if !self.values.is_null() {
+                drop_nodes(self.values);
+                Box::from_raw(self.values);
             }
             drop_free_nodes(self.free);
         }
@@ -573,7 +581,7 @@ where
 
 pub struct RawEntryBuilderMut<'a, K, V, S> {
     hash_builder: &'a S,
-    head: &'a mut *mut Node<K, V>,
+    values: &'a mut *mut Node<K, V>,
     free: &'a mut *mut Node<K, V>,
     entry: hash_map::RawEntryBuilderMut<'a, *mut Node<K, V>, (), NullHasher>,
 }
@@ -612,13 +620,13 @@ where
             hash_map::RawEntryMut::Occupied(occupied) => {
                 RawEntryMut::Occupied(RawOccupiedEntryMut {
                     free: self.free,
-                    head: self.head,
+                    values: self.values,
                     entry: occupied,
                 })
             }
             hash_map::RawEntryMut::Vacant(vacant) => RawEntryMut::Vacant(RawVacantEntryMut {
                 hash_builder: self.hash_builder,
-                head: self.head,
+                values: self.values,
                 free: self.free,
                 entry: vacant,
             }),
@@ -693,7 +701,7 @@ impl<'a, K, V, S> RawEntryMut<'a, K, V, S> {
 
 pub struct RawOccupiedEntryMut<'a, K, V> {
     free: &'a mut *mut Node<K, V>,
-    head: &'a mut *mut Node<K, V>,
+    values: &'a mut *mut Node<K, V>,
     entry: hash_map::RawOccupiedEntryMut<'a, *mut Node<K, V>, ()>,
 }
 
@@ -753,7 +761,7 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
         unsafe {
             let node = *self.entry.key_mut();
             detach_node(node);
-            attach_node(*self.head, node);
+            attach_node(*self.values, node);
         }
     }
 
@@ -761,7 +769,7 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
         unsafe {
             let node = *self.entry.key_mut();
             detach_node(node);
-            attach_node((**self.head).prev, node);
+            attach_node((**self.values).prev, node);
         }
     }
 
@@ -791,7 +799,7 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
 
 pub struct RawVacantEntryMut<'a, K, V, S> {
     hash_builder: &'a S,
-    head: &'a mut *mut Node<K, V>,
+    values: &'a mut *mut Node<K, V>,
     free: &'a mut *mut Node<K, V>,
     entry: hash_map::RawVacantEntryMut<'a, *mut Node<K, V>, (), NullHasher>,
 }
@@ -826,11 +834,11 @@ impl<'a, K, V, S> RawVacantEntryMut<'a, K, V, S> {
         S: BuildHasher,
     {
         unsafe {
-            ensure_guard_node(self.head);
+            ensure_guard_node(self.values);
             let new_node = allocate_node(self.free);
             (*new_node).key.as_mut_ptr().write(key);
             (*new_node).value.as_mut_ptr().write(value);
-            attach_node(*self.head, new_node);
+            attach_node(*self.values, new_node);
 
             let node = *self
                 .entry
