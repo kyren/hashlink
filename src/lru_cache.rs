@@ -7,6 +7,11 @@ use hashbrown::hash_map;
 
 use crate::linked_hash_map::{self, LinkedHashMap};
 
+pub use crate::linked_hash_map::{
+    Drain, Entry, Iter, IterMut, OccupiedEntry, RawEntryBuilder, RawEntryBuilderMut,
+    RawOccupiedEntryMut, RawVacantEntryMut, VacantEntry,
+};
+
 pub struct LruCache<K, V, S = hash_map::DefaultHashBuilder> {
     map: LinkedHashMap<K, V, S>,
     max_size: usize,
@@ -23,7 +28,8 @@ impl<K: Eq + Hash, V> LruCache<K, V> {
 }
 
 impl<K: Eq + Hash, V, S> LruCache<K, V, S>
-    where S: BuildHasher
+where
+    S: BuildHasher,
 {
     #[inline]
     pub fn with_hasher(capacity: usize, hash_builder: S) -> Self {
@@ -197,14 +203,3 @@ impl<'a, K: Eq + Hash, V, S: BuildHasher> IntoIterator for &'a mut LruCache<K, V
         self.iter_mut()
     }
 }
-
-pub type Drain<K, V> = linked_hash_map::Drain<K, V>;
-pub type Iter<'a, K, V> = linked_hash_map::Iter<'a, K, V>;
-pub type IterMut<'a, K, V> = linked_hash_map::IterMut<'a, K, V>;
-pub type Entry<'a, K, V, S> = linked_hash_map::Entry<'a, K, V, S>;
-pub type OccupiedEntry<'a, K, V> = linked_hash_map::OccupiedEntry<'a, K, V>;
-pub type VacantEntry<'a, K, V, S> = linked_hash_map::VacantEntry<'a, K, V, S>;
-pub type RawEntryBuilder<'a, K, V, S> = linked_hash_map::RawEntryBuilder<'a, K, V, S>;
-pub type RawEntryBuilderMut<'a, K, V, S> = linked_hash_map::RawEntryBuilderMut<'a, K, V, S>;
-pub type RawOccupiedEntryMut<'a, K, V> = linked_hash_map::RawOccupiedEntryMut<'a, K, V>;
-pub type RawlVacantEntryMut<'a, K, V, S> = linked_hash_map::RawVacantEntryMut<'a, K, V, S>;
