@@ -3,7 +3,15 @@ name = "hashlink"
 version = "0.1.0"
 authors = ["kyren <kerriganw@gmail.com>"]
 edition = "2018"
+description = "HashMap-like containers that hold their key-value pairs in a user controllable order"
+repository = "https://github.com/kyren/hashlink"
+documentation = "https://docs.rs/hashlink"
+readme = "README.md"
+keywords = ["data-structures"]
 license = "MIT or APACHE"
+
+[badges]
+circle-ci = { repository = "kyren/hashlink", branch = "master" }
 
 [dependencies]
 hashbrown = "0.5.0"
