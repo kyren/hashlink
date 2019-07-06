@@ -107,6 +107,48 @@ fn test_pop() {
 }
 
 #[test]
+fn test_move() {
+    let to_back = |map: &mut LinkedHashMap<_, _>, key| {
+        match map.entry(key) {
+            Entry::Occupied(mut occupied) => occupied.to_back(),
+            Entry::Vacant(_) => panic!(),
+        }
+    };
+
+    let to_front = |map: &mut LinkedHashMap<_, _>, key| {
+        match map.entry(key) {
+            Entry::Occupied(mut occupied) => occupied.to_front(),
+            Entry::Vacant(_) => panic!(),
+        }
+    };
+
+    let mut map = LinkedHashMap::new();
+    map.insert(1, 10);
+    map.insert(2, 20);
+    map.insert(3, 30);
+    map.insert(4, 40);
+    map.insert(5, 50);
+
+    to_back(&mut map, 1);
+    assert_eq!(map.keys().copied().collect::<Vec<_>>(), vec![2, 3, 4, 5, 1]);
+
+    to_front(&mut map, 4);
+    assert_eq!(map.keys().copied().collect::<Vec<_>>(), vec![4, 2, 3, 5, 1]);
+
+    to_back(&mut map, 3);
+    assert_eq!(map.keys().copied().collect::<Vec<_>>(), vec![4, 2, 5, 1, 3]);
+
+    to_front(&mut map, 2);
+    assert_eq!(map.keys().copied().collect::<Vec<_>>(), vec![2, 4, 5, 1, 3]);
+
+    to_back(&mut map, 3);
+    assert_eq!(map.keys().copied().collect::<Vec<_>>(), vec![2, 4, 5, 1, 3]);
+
+    to_front(&mut map, 2);
+    assert_eq!(map.keys().copied().collect::<Vec<_>>(), vec![2, 4, 5, 1, 3]);
+}
+
+#[test]
 fn test_clear() {
     let mut map = LinkedHashMap::new();
     map.insert(1, 10);
