@@ -8,7 +8,7 @@ repository = "https://github.com/kyren/hashlink"
 documentation = "https://docs.rs/hashlink"
 readme = "README.md"
 keywords = ["data-structures"]
-license = "MIT or APACHE"
+license = "MIT OR Apache-2.0"
 
 [badges]
 circle-ci = { repository = "kyren/hashlink", branch = "master" }
