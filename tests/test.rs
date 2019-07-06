@@ -327,8 +327,8 @@ fn test_into_iter_drop() {
         map.insert("c", Counter(&mut c));
 
         let mut iter = map.into_iter();
-        iter.next();
-        iter.next_back();
+        assert_eq!(iter.next().map(|p| p.0), Some("a"));
+        assert_eq!(iter.next_back().map(|p| p.0), Some("c"));
     }
 
     assert_eq!(a, 1);
@@ -357,8 +357,8 @@ fn test_drain() {
         map.insert("c", Counter(&mut c));
 
         let mut iter = map.drain();
-        iter.next();
-        iter.next_back();
+        assert_eq!(iter.next().map(|p| p.0), Some("a"));
+        assert_eq!(iter.next_back().map(|p| p.0), Some("c"));
 
         drop(iter);
         assert_eq!(map.len(), 0);

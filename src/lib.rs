@@ -15,8 +15,8 @@ pub struct LinkedHashMap<K, V, S = hash_map::DefaultHashBuilder> {
     // the entry API without mutable aliasing.
     hash_builder: S,
     // Circular linked list of nodes.  If `values` is non-null, it will point to a "guard node"
-    // which will never have an initialized key or value, `values.next` will contain the last key /
-    // value in the list, `values.prev` will contain the first key / value in the list.
+    // which will never have an initialized key or value, `values.prev` will contain the last key /
+    // value in the list, `values.next` will contain the first key / value in the list.
     values: *mut Node<K, V>,
     // *Singly* linked list of free nodes.  The `prev` pointers in the free list should be assumed
     // invalid.
@@ -84,7 +84,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
         self.map.clear();
         if !self.values.is_null() {
             unsafe {
-                drop_nodes(self.values);
+                drop_value_nodes(self.values);
                 (*self.values).prev = self.values;
                 (*self.values).next = self.values;
             }
@@ -95,7 +95,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
         let head = if self.values.is_null() {
             ptr::null_mut()
         } else {
-            unsafe { (*self.values).prev }
+            unsafe { (*self.values).next }
         };
         Iter {
             head,
@@ -109,7 +109,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
         let head = if self.values.is_null() {
             ptr::null_mut()
         } else {
-            unsafe { (*self.values).prev }
+            unsafe { (*self.values).next }
         };
         IterMut {
             head,
@@ -122,7 +122,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
     pub fn drain(&mut self) -> Drain<K, V> {
         unsafe {
             let (head, tail) = if !self.values.is_null() {
-                ((*self.values).prev, (*self.values).next)
+                ((*self.values).next, (*self.values).prev)
             } else {
                 (ptr::null_mut(), ptr::null_mut())
             };
@@ -166,7 +166,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
             return None;
         }
         unsafe {
-            let front = (*self.values).prev;
+            let front = (*self.values).next;
             Some((&*(*front).key.as_ptr(), &*(*front).value.as_ptr()))
         }
     }
@@ -176,7 +176,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
             return None;
         }
         unsafe {
-            let back = (*self.values).next;
+            let back = (*self.values).prev;
             Some((&*(*back).key.as_ptr(), &*(*back).value.as_ptr()))
         }
     }
@@ -264,7 +264,7 @@ where
             return None;
         }
         unsafe {
-            let front = (*self.values).prev;
+            let front = (*self.values).next;
             match self
                 .map
                 .raw_entry_mut()
@@ -284,7 +284,7 @@ where
             return None;
         }
         unsafe {
-            let back = (*self.values).next;
+            let back = (*self.values).prev;
             match self
                 .map
                 .raw_entry_mut()
@@ -333,7 +333,7 @@ impl<K, V, S> Drop for LinkedHashMap<K, V, S> {
     fn drop(&mut self) {
         unsafe {
             if !self.values.is_null() {
-                drop_nodes(self.values);
+                drop_value_nodes(self.values);
                 Box::from_raw(self.values);
             }
             drop_free_nodes(self.free);
@@ -761,7 +761,7 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
         unsafe {
             let node = *self.entry.key_mut();
             detach_node(node);
-            attach_node(*self.values, node);
+            attach_before(node, *self.values);
         }
     }
 
@@ -769,7 +769,7 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
         unsafe {
             let node = *self.entry.key_mut();
             detach_node(node);
-            attach_node((**self.values).prev, node);
+            attach_before(node, (**self.values).next);
         }
     }
 
@@ -838,7 +838,7 @@ impl<'a, K, V, S> RawVacantEntryMut<'a, K, V, S> {
             let new_node = allocate_node(self.free);
             (*new_node).key.as_mut_ptr().write(key);
             (*new_node).value.as_mut_ptr().write(value);
-            attach_node(*self.values, new_node);
+            attach_before(new_node, *self.values);
 
             let node = *self
                 .entry
@@ -910,12 +910,14 @@ where
     V: Send,
 {
 }
+
 unsafe impl<'a, K, V> Send for IterMut<'a, K, V>
 where
     K: Send,
     V: Send,
 {
 }
+
 unsafe impl<K, V> Send for Drain<K, V>
 where
     K: Send,
@@ -929,12 +931,14 @@ where
     V: Sync,
 {
 }
+
 unsafe impl<'a, K, V> Sync for IterMut<'a, K, V>
 where
     K: Sync,
     V: Sync,
 {
 }
+
 unsafe impl<K, V> Sync for Drain<K, V>
 where
     K: Sync,
@@ -958,7 +962,7 @@ impl<'a, K, V> Iterator for Iter<'a, K, V> {
             self.remaining -= 1;
             unsafe {
                 let r = Some((&*(*self.head).key.as_ptr(), &*(*self.head).value.as_ptr()));
-                self.head = (*self.head).prev;
+                self.head = (*self.head).next;
                 r
             }
         }
@@ -982,7 +986,7 @@ impl<'a, K, V> Iterator for IterMut<'a, K, V> {
                     &*(*self.head).key.as_ptr(),
                     &mut *(*self.head).value.as_mut_ptr(),
                 ));
-                self.head = (*self.head).prev;
+                self.head = (*self.head).next;
                 r
             }
         }
@@ -1002,9 +1006,9 @@ impl<K, V> Iterator for Drain<K, V> {
         }
         self.remaining -= 1;
         unsafe {
-            let prev = (*self.head).prev;
+            let next = (*self.head).next;
             let e = *Box::from_raw(self.head);
-            self.head = prev;
+            self.head = next;
             Some((e.key.assume_init(), e.value.assume_init()))
         }
     }
@@ -1021,7 +1025,7 @@ impl<'a, K, V> DoubleEndedIterator for Iter<'a, K, V> {
         } else {
             self.remaining -= 1;
             unsafe {
-                self.tail = (*self.tail).next;
+                self.tail = (*self.tail).prev;
                 Some((&*(*self.tail).key.as_ptr(), &*(*self.tail).value.as_ptr()))
             }
         }
@@ -1035,7 +1039,7 @@ impl<'a, K, V> DoubleEndedIterator for IterMut<'a, K, V> {
         } else {
             self.remaining -= 1;
             unsafe {
-                self.tail = (*self.tail).next;
+                self.tail = (*self.tail).prev;
                 Some((
                     &*(*self.tail).key.as_ptr(),
                     &mut *(*self.tail).value.as_mut_ptr(),
@@ -1052,9 +1056,9 @@ impl<K, V> DoubleEndedIterator for Drain<K, V> {
         }
         self.remaining -= 1;
         unsafe {
-            let next = (*self.tail).next;
+            let prev = (*self.tail).prev;
             let e = *Box::from_raw(self.tail);
-            self.tail = next;
+            self.tail = prev;
             Some((e.key.assume_init(), e.value.assume_init()))
         }
     }
@@ -1070,11 +1074,11 @@ impl<K, V> Drop for Drain<K, V> {
     fn drop(&mut self) {
         for _ in 0..self.remaining {
             unsafe {
-                let next = (*self.tail).next;
+                let prev = (*self.tail).prev;
                 (*self.tail).key.as_ptr().read();
                 (*self.tail).value.as_ptr().read();
                 Box::from_raw(self.tail);
-                self.tail = next;
+                self.tail = prev;
             }
         }
     }
@@ -1236,12 +1240,12 @@ unsafe fn ensure_guard_node<K, V>(head: &mut *mut Node<K, V>) {
     }
 }
 
-// Attach the `to_attach` node to the existing circular list *after* `node`.
-unsafe fn attach_node<K, V>(node: *mut Node<K, V>, to_attach: *mut Node<K, V>) {
-    (*to_attach).next = (*node).next;
-    (*to_attach).prev = node;
-    (*node).next = to_attach;
-    (*(*to_attach).next).prev = to_attach;
+// Attach the `to_attach` node to the existing circular list *before* `node`.
+unsafe fn attach_before<K, V>(to_attach: *mut Node<K, V>, node: *mut Node<K, V>) {
+    (*to_attach).prev = (*node).prev;
+    (*to_attach).next = node;
+    (*node).prev = to_attach;
+    (*(*to_attach).prev).next = to_attach;
 }
 
 unsafe fn detach_node<K, V>(node: *mut Node<K, V>) {
@@ -1278,15 +1282,15 @@ unsafe fn allocate_node<K, V>(free_list: &mut *mut Node<K, V>) -> *mut Node<K, V
     }
 }
 
-// Head node is assumed to be the guard node and is *not* dropped.
-unsafe fn drop_nodes<K, V>(head: *mut Node<K, V>) {
-    let mut cur = (*head).next;
-    while cur != head {
-        let next = (*cur).next;
+// Given node is assumed to be the guard node and is *not* dropped.
+unsafe fn drop_value_nodes<K, V>(guard: *mut Node<K, V>) {
+    let mut cur = (*guard).prev;
+    while cur != guard {
+        let prev = (*cur).prev;
         (*cur).key.as_ptr().read();
         (*cur).value.as_ptr().read();
         Box::from_raw(cur);
-        cur = next;
+        cur = prev;
     }
 }
 
