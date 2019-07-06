@@ -83,6 +83,22 @@ impl<K: Eq + Hash, V, S: BuildHasher> LruCache<K, V, S> {
     }
 
     #[inline]
+    pub fn produce_err<Q, F, E>(&mut self, k: &Q, f: F) -> Result<&mut V, E>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ToOwned<Owned = K> + ?Sized,
+        F: FnOnce() -> Result<V, E>,
+    {
+        Ok(match self.map.raw_entry_mut().from_key(k) {
+            linked_hash_map::RawEntryMut::Occupied(mut occupied) => {
+                occupied.to_back();
+                occupied.into_mut()
+            }
+            linked_hash_map::RawEntryMut::Vacant(vacant) => vacant.insert(k.to_owned(), f()?).1,
+        })
+    }
+
+    #[inline]
     pub fn remove<Q>(&mut self, k: &Q) -> Option<V>
     where
         K: Borrow<Q>,
