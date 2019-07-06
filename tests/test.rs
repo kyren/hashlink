@@ -108,18 +108,14 @@ fn test_pop() {
 
 #[test]
 fn test_move() {
-    let to_back = |map: &mut LinkedHashMap<_, _>, key| {
-        match map.entry(key) {
-            Entry::Occupied(mut occupied) => occupied.to_back(),
-            Entry::Vacant(_) => panic!(),
-        }
+    let to_back = |map: &mut LinkedHashMap<_, _>, key| match map.entry(key) {
+        Entry::Occupied(mut occupied) => occupied.to_back(),
+        Entry::Vacant(_) => panic!(),
     };
 
-    let to_front = |map: &mut LinkedHashMap<_, _>, key| {
-        match map.entry(key) {
-            Entry::Occupied(mut occupied) => occupied.to_front(),
-            Entry::Vacant(_) => panic!(),
-        }
+    let to_front = |map: &mut LinkedHashMap<_, _>, key| match map.entry(key) {
+        Entry::Occupied(mut occupied) => occupied.to_front(),
+        Entry::Vacant(_) => panic!(),
     };
 
     let mut map = LinkedHashMap::new();
