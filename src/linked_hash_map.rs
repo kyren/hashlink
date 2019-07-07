@@ -226,12 +226,12 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
         // removed.  Instead, we push the removed nodes onto the free list eagerly, then try and
         // drop the keys and values for any newly freed nodes *after* `HashMap::retain` has
         // completely finished.
-        struct DropFilteredValues<K, V> {
-            start_free: Option<NonNull<Node<K, V>>>,
+        struct DropFilteredValues<'a, K, V> {
+            free: &'a mut Option<NonNull<Node<K, V>>>,
             cur_free: Option<NonNull<Node<K, V>>>,
         }
 
-        impl<K, V> DropFilteredValues<K, V> {
+        impl<'a, K, V> DropFilteredValues<'a, K, V> {
             #[inline]
             fn drop_later(&mut self, node: NonNull<Node<K, V>>) {
                 unsafe {
@@ -241,23 +241,25 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
             }
         }
 
-        impl<K, V> Drop for DropFilteredValues<K, V> {
-            #[inline]
+        impl<'a, K, V> Drop for DropFilteredValues<'a, K, V> {
             fn drop(&mut self) {
                 unsafe {
-                    while self.cur_free != self.start_free {
+                    let end_free = self.cur_free;
+                    while self.cur_free != *self.free {
                         let cur_free = self.cur_free.as_ptr();
                         (*cur_free).take_key();
                         (*cur_free).take_value();
                         self.cur_free = (*cur_free).links.free.next;
                     }
+                    *self.free = end_free;
                 }
             }
         }
 
+        let free = self.free;
         let mut drop_filtered_values = DropFilteredValues {
-            start_free: self.free,
-            cur_free: self.free,
+            free: &mut self.free,
+            cur_free: free,
         };
 
         self.map.retain(|&node, _| unsafe {

@@ -461,3 +461,38 @@ fn test_send_sync() {
     is_send_sync::<linked_hash_map::Keys<u32, i32>>();
     is_send_sync::<linked_hash_map::Values<u32, i32>>();
 }
+
+#[test]
+fn test_retain() {
+    use std::{cell::Cell, rc::Rc};
+
+    let xs = [1, 2, 3, 4, 5, 6];
+    let mut map: LinkedHashMap<String, i32> = xs.iter().map(|i| (i.to_string(), *i)).collect();
+    map.retain(|_, v| *v % 2 == 0);
+    assert_eq!(map.len(), 3);
+    assert!(map.contains_key("2"));
+    assert!(map.contains_key("4"));
+    assert!(map.contains_key("6"));
+
+    struct Counter(Rc<Cell<u32>>);
+
+    impl<'a> Drop for Counter {
+        fn drop(&mut self) {
+            self.0.set(self.0.get() + 1);
+        }
+    }
+
+    let c = Rc::new(Cell::new(0));
+
+    let mut map = LinkedHashMap::new();
+    map.insert(1, Counter(Rc::clone(&c)));
+    map.insert(2, Counter(Rc::clone(&c)));
+    map.insert(3, Counter(Rc::clone(&c)));
+    map.insert(4, Counter(Rc::clone(&c)));
+
+    map.retain(|k, _| *k % 2 == 0);
+
+    assert!(c.get() == 2);
+    drop(map);
+    assert!(c.get() == 4);
+}
