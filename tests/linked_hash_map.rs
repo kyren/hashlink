@@ -1,7 +1,41 @@
-use hashlink::{
-    linked_hash_map::{self, Entry},
-    LinkedHashMap,
-};
+use hashlink::{linked_hash_map, LinkedHashMap};
+
+#[allow(dead_code)]
+fn assert_covariance() {
+    fn set<'new>(v: LinkedHashMap<&'static str, ()>) -> LinkedHashMap<&'new str, ()> {
+        v
+    }
+
+    fn iter<'a, 'new>(
+        v: linked_hash_map::Iter<'a, &'static str, &'static str>,
+    ) -> linked_hash_map::Iter<'a, &'new str, &'new str> {
+        v
+    }
+
+    fn iter_mut<'a, 'new>(
+        v: linked_hash_map::Iter<'a, &'static str, ()>,
+    ) -> linked_hash_map::Iter<'a, &'new str, ()> {
+        v
+    }
+
+    fn into_iter<'new>(
+        v: linked_hash_map::IntoIter<&'static str, &'static str>,
+    ) -> linked_hash_map::IntoIter<&'new str, &'new str> {
+        v
+    }
+
+    fn drain<'new>(
+        d: linked_hash_map::Drain<'static, &'static str, &'static str>,
+    ) -> linked_hash_map::Drain<'new, &'new str, &'new str> {
+        d
+    }
+
+    fn raw_entry_builder<'a, 'new>(
+        v: linked_hash_map::RawEntryBuilder<'a, &'static str, &'static str, ()>,
+    ) -> linked_hash_map::RawEntryBuilder<'a, &'new str, &'new str, ()> {
+        v
+    }
+}
 
 #[test]
 fn test_index() {
@@ -36,7 +70,7 @@ fn test_insert_update() {
 fn test_entry_insert_vacant() {
     let mut map = LinkedHashMap::new();
     match map.entry("1".to_string()) {
-        Entry::Vacant(e) => {
+        linked_hash_map::Entry::Vacant(e) => {
             assert_eq!(*e.insert(vec![10, 10]), vec![10, 10]);
         }
         _ => panic!("fail"),
@@ -45,7 +79,7 @@ fn test_entry_insert_vacant() {
     assert_eq!(map["1"], vec![10, 10]);
 
     match map.entry("1".to_string()) {
-        Entry::Occupied(mut e) => {
+        linked_hash_map::Entry::Occupied(mut e) => {
             assert_eq!(*e.get(), vec![10, 10]);
             assert_eq!(e.insert(vec![10, 16]), vec![10, 10]);
         }
@@ -56,7 +90,7 @@ fn test_entry_insert_vacant() {
     assert_eq!(map["1"], vec![10, 16]);
 
     match map.entry("1".to_string()) {
-        Entry::Occupied(e) => {
+        linked_hash_map::Entry::Occupied(e) => {
             assert_eq!(e.remove(), vec![10, 16]);
         }
         _ => panic!("fail"),
@@ -112,13 +146,13 @@ fn test_pop() {
 #[test]
 fn test_move() {
     let to_back = |map: &mut LinkedHashMap<_, _>, key| match map.entry(key) {
-        Entry::Occupied(mut occupied) => occupied.to_back(),
-        Entry::Vacant(_) => panic!(),
+        linked_hash_map::Entry::Occupied(mut occupied) => occupied.to_back(),
+        linked_hash_map::Entry::Vacant(_) => panic!(),
     };
 
     let to_front = |map: &mut LinkedHashMap<_, _>, key| match map.entry(key) {
-        Entry::Occupied(mut occupied) => occupied.to_front(),
-        Entry::Vacant(_) => panic!(),
+        linked_hash_map::Entry::Occupied(mut occupied) => occupied.to_front(),
+        linked_hash_map::Entry::Vacant(_) => panic!(),
     };
 
     let mut map = LinkedHashMap::new();
@@ -176,6 +210,14 @@ fn test_iter() {
     assert_eq!((&"c", &30), iter.next().unwrap());
     assert_eq!(None, iter.next());
     assert_eq!(None, iter.next());
+
+    let mut iter = map.iter();
+    assert_eq!((&"a", &10), iter.next().unwrap());
+    let mut iclone = iter.clone();
+    assert_eq!((&"b", &20), iter.next().unwrap());
+    assert_eq!((&"b", &20), iclone.next().unwrap());
+    assert_eq!((&"c", &30), iter.next().unwrap());
+    assert_eq!((&"c", &30), iclone.next().unwrap());
 
     // reversed iter
     let mut rev_iter = map.iter().rev();
@@ -250,6 +292,8 @@ fn test_iter_mut() {
         assert_eq!(&"a", entry.0);
         *entry.1 = 17;
 
+        assert_eq!(format!("{:?}", iter), "[(\"c\", 30), (\"b\", 20)]");
+
         // reverse iterator
         let mut iter = iter.rev();
         let entry = iter.next().unwrap();
@@ -279,7 +323,8 @@ fn test_consuming_iter() {
     let mut iter = map.into_iter();
     assert_eq!(Some(("a", 10)), iter.next());
     assert_eq!(Some(("b", 20)), iter.next_back());
-    assert_eq!(1, iter.len());
+    assert_eq!(iter.len(), 1);
+    assert_eq!(format!("{:?}", iter), "[(\"c\", 30)]");
     assert_eq!(Some(("c", 30)), iter.next());
     assert_eq!(None, iter.next());
 }
@@ -360,6 +405,9 @@ fn test_drain() {
     let mut iter = map.drain();
     assert_eq!(iter.next().map(|p| p.0), Some("a"));
     assert_eq!(iter.next_back().map(|p| p.0), Some("c"));
+    assert_eq!(iter.next_back().map(|p| p.0), Some("b"));
+    assert!(iter.next().is_none());
+    assert!(iter.next_back().is_none());
 
     drop(iter);
     assert_eq!(map.len(), 0);
@@ -374,8 +422,8 @@ fn test_drain() {
 
     let mut iter = map.drain();
     assert_eq!(iter.next().map(|p| p.0), Some("a"));
+    assert_eq!(iter.next().map(|p| p.0), Some("b"));
     assert_eq!(iter.next_back().map(|p| p.0), Some("c"));
-    assert_eq!(iter.next_back().map(|p| p.0), Some("b"));
     assert!(iter.next().is_none());
     assert!(iter.next_back().is_none());
 
@@ -385,6 +433,17 @@ fn test_drain() {
     assert_eq!(a.get(), 2);
     assert_eq!(b.get(), 2);
     assert_eq!(c.get(), 2);
+
+    map.insert("a", Counter(a.clone()));
+    map.insert("b", Counter(b.clone()));
+    map.insert("c", Counter(c.clone()));
+
+    map.drain();
+    assert_eq!(map.len(), 0);
+
+    assert_eq!(a.get(), 3);
+    assert_eq!(b.get(), 3);
+    assert_eq!(c.get(), 3);
 }
 
 #[test]

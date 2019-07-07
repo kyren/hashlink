@@ -7,23 +7,23 @@ use std::{
     marker::PhantomData,
     mem::{self, MaybeUninit},
     ops::{Index, IndexMut},
-    ptr,
+    ptr::{self, NonNull},
 };
 
 use hashbrown::{hash_map, HashMap};
 
 pub struct LinkedHashMap<K, V, S = hash_map::DefaultHashBuilder> {
-    map: HashMap<*mut Node<K, V>, (), NullHasher>,
+    map: HashMap<NonNull<Node<K, V>>, (), NullHasher>,
     // We need to keep any custom hash builder outside of the HashMap so we can access it alongside
     // the entry API without mutable aliasing.
     hash_builder: S,
     // Circular linked list of nodes.  If `values` is non-null, it will point to a "guard node"
     // which will never have an initialized key or value, `values.prev` will contain the last key /
     // value in the list, `values.next` will contain the first key / value in the list.
-    values: *mut Node<K, V>,
+    values: Option<NonNull<Node<K, V>>>,
     // *Singly* linked list of free nodes.  The `prev` pointers in the free list should be assumed
     // invalid.
-    free: *mut Node<K, V>,
+    free: Option<NonNull<Node<K, V>>>,
 }
 
 impl<K, V> LinkedHashMap<K, V> {
@@ -32,8 +32,8 @@ impl<K, V> LinkedHashMap<K, V> {
         Self {
             hash_builder: hash_map::DefaultHashBuilder::default(),
             map: HashMap::with_hasher(NullHasher),
-            values: ptr::null_mut(),
-            free: ptr::null_mut(),
+            values: None,
+            free: None,
         }
     }
 
@@ -42,8 +42,8 @@ impl<K, V> LinkedHashMap<K, V> {
         Self {
             hash_builder: hash_map::DefaultHashBuilder::default(),
             map: HashMap::with_capacity_and_hasher(capacity, NullHasher),
-            values: ptr::null_mut(),
-            free: ptr::null_mut(),
+            values: None,
+            free: None,
         }
     }
 }
@@ -54,8 +54,8 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
         Self {
             hash_builder,
             map: HashMap::with_hasher(NullHasher),
-            values: ptr::null_mut(),
-            free: ptr::null_mut(),
+            values: None,
+            free: None,
         }
     }
 
@@ -64,8 +64,8 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
         Self {
             hash_builder,
             map: HashMap::with_capacity_and_hasher(capacity, NullHasher),
-            values: ptr::null_mut(),
-            free: ptr::null_mut(),
+            values: None,
+            free: None,
         }
     }
 
@@ -75,10 +75,15 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
     }
 
     #[inline]
+    pub fn try_reserve(&mut self, additional: usize) -> Result<(), hashbrown::CollectionAllocErr> {
+        self.map.try_reserve(additional)
+    }
+
+    #[inline]
     pub fn shrink_to_fit(&mut self) {
         self.map.shrink_to_fit();
         unsafe { drop_free_nodes(self.free) };
-        self.free = ptr::null_mut();
+        self.free = None;
     }
 
     #[inline]
@@ -94,25 +99,31 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
     #[inline]
     pub fn clear(&mut self) {
         self.map.clear();
-        if !self.values.is_null() {
+        if let Some(mut values) = self.values {
             unsafe {
-                drop_value_nodes(self.values);
-                (*self.values).prev = self.values;
-                (*self.values).next = self.values;
+                drop_value_nodes(values);
+                values.as_mut().links.value = ValueLinks {
+                    prev: values,
+                    next: values,
+                };
             }
         }
     }
 
     #[inline]
     pub fn iter(&self) -> Iter<K, V> {
-        let head = if self.values.is_null() {
-            ptr::null_mut()
+        let (head, tail) = if let Some(values) = self.values {
+            unsafe {
+                let ValueLinks { next, prev } = values.as_ref().links.value;
+                (next.as_ptr(), prev.as_ptr())
+            }
         } else {
-            unsafe { (*self.values).next }
+            (ptr::null_mut(), ptr::null_mut())
         };
+
         Iter {
             head,
-            tail: self.values,
+            tail,
             remaining: self.len(),
             marker: PhantomData,
         }
@@ -120,14 +131,18 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
 
     #[inline]
     pub fn iter_mut(&mut self) -> IterMut<K, V> {
-        let head = if self.values.is_null() {
-            ptr::null_mut()
+        let (head, tail) = if let Some(values) = self.values {
+            unsafe {
+                let ValueLinks { next, prev } = values.as_ref().links.value;
+                (Some(next), Some(prev))
+            }
         } else {
-            unsafe { (*self.values).next }
+            (None, None)
         };
+
         IterMut {
             head,
-            tail: self.values,
+            tail,
             remaining: self.len(),
             marker: PhantomData,
         }
@@ -136,21 +151,22 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
     #[inline]
     pub fn drain(&mut self) -> Drain<'_, K, V> {
         unsafe {
-            let (head, tail) = if !self.values.is_null() {
-                let next = (*self.values).next;
-                let prev = (*self.values).prev;
-                (*self.values).next = self.values;
-                (*self.values).prev = self.values;
-                (next, prev)
+            let (head, tail) = if let Some(mut values) = self.values {
+                let ValueLinks { next, prev } = values.as_ref().links.value;
+                values.as_mut().links.value = ValueLinks {
+                    next: values,
+                    prev: values,
+                };
+                (Some(next), Some(prev))
             } else {
-                (ptr::null_mut(), ptr::null_mut())
+                (None, None)
             };
             let len = self.len();
 
             self.map.clear();
 
             Drain {
-                free: &mut self.free,
+                free: Some((&self.free).into()),
                 head,
                 tail,
                 remaining: len,
@@ -182,7 +198,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
             return None;
         }
         unsafe {
-            let front = (*self.values).next;
+            let front = (*self.values.as_ptr()).links.value.next.as_ptr();
             Some(((*front).key_ref(), (*front).value_ref()))
         }
     }
@@ -193,11 +209,12 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
             return None;
         }
         unsafe {
-            let back = (*self.values).prev;
+            let back = (*self.values.as_ptr()).links.value.prev.as_ptr();
             Some(((*back).key_ref(), (*back).value_ref()))
         }
     }
 
+    #[inline]
     pub fn retain<F>(&mut self, mut f: F)
     where
         F: FnMut(&K, &mut V) -> bool,
@@ -210,12 +227,13 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
         // drop the keys and values for any newly freed nodes *after* `HashMap::retain` has
         // completely finished.
         struct DropFilteredValues<K, V> {
-            start_free: *mut Node<K, V>,
-            cur_free: *mut Node<K, V>,
+            start_free: Option<NonNull<Node<K, V>>>,
+            cur_free: Option<NonNull<Node<K, V>>>,
         }
 
         impl<K, V> DropFilteredValues<K, V> {
-            fn drop_later(&mut self, node: *mut Node<K, V>) {
+            #[inline]
+            fn drop_later(&mut self, node: NonNull<Node<K, V>>) {
                 unsafe {
                     detach_node(node);
                     push_free(&mut self.cur_free, node);
@@ -224,12 +242,14 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
         }
 
         impl<K, V> Drop for DropFilteredValues<K, V> {
+            #[inline]
             fn drop(&mut self) {
                 unsafe {
                     while self.cur_free != self.start_free {
-                        (*self.cur_free).take_key();
-                        (*self.cur_free).take_value();
-                        self.cur_free = (*self.cur_free).next;
+                        let cur_free = self.cur_free.as_ptr();
+                        (*cur_free).take_key();
+                        (*cur_free).take_value();
+                        self.cur_free = (*cur_free).links.free.next;
                     }
                 }
             }
@@ -241,7 +261,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
         };
 
         self.map.retain(|&node, _| unsafe {
-            if f((*node).key_ref(), (*node).value_mut()) {
+            if f((*node.as_ptr()).key_ref(), (*node.as_ptr()).value_mut()) {
                 true
             } else {
                 drop_filtered_values.drop_later(node);
@@ -250,10 +270,12 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
         });
     }
 
+    #[inline]
     pub fn hasher(&self) -> &S {
         &self.hash_builder
     }
 
+    #[inline]
     pub fn capacity(&self) -> usize {
         self.map.capacity()
     }
@@ -349,13 +371,11 @@ where
             return None;
         }
         unsafe {
-            let front = (*self.values).next;
-            match self
-                .map
-                .raw_entry_mut()
-                .from_hash(hash_key(&self.hash_builder, (*front).key_ref()), |k| {
-                    (**k).key_ref().eq((*front).key_ref())
-                }) {
+            let front = (*self.values.as_ptr()).links.value.next;
+            match self.map.raw_entry_mut().from_hash(
+                hash_key(&self.hash_builder, front.as_ref().key_ref()),
+                |k| (*k).as_ref().key_ref().eq(front.as_ref().key_ref()),
+            ) {
                 hash_map::RawEntryMut::Occupied(occupied) => {
                     Some(remove_node(&mut self.free, occupied.remove_entry().0))
                 }
@@ -370,12 +390,12 @@ where
             return None;
         }
         unsafe {
-            let back = (*self.values).prev;
+            let back = (*self.values.as_ptr()).links.value.prev;
             match self
                 .map
                 .raw_entry_mut()
-                .from_hash(hash_key(&self.hash_builder, (*back).key_ref()), |k| {
-                    (**k).key_ref().eq((*back).key_ref())
+                .from_hash(hash_key(&self.hash_builder, back.as_ref().key_ref()), |k| {
+                    (*k).as_ref().key_ref().eq(back.as_ref().key_ref())
                 }) {
                 hash_map::RawEntryMut::Occupied(occupied) => {
                     Some(remove_node(&mut self.free, occupied.remove_entry().0))
@@ -420,6 +440,7 @@ where
 }
 
 impl<K: Hash + Eq, V, S: BuildHasher + Default> FromIterator<(K, V)> for LinkedHashMap<K, V, S> {
+    #[inline]
     fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Self {
         let iter = iter.into_iter();
         let mut map = Self::with_capacity_and_hasher(iter.size_hint().0, S::default());
@@ -431,12 +452,14 @@ impl<K: Hash + Eq, V, S: BuildHasher + Default> FromIterator<(K, V)> for LinkedH
 impl<A: fmt::Debug + Hash + Eq, B: fmt::Debug, S: BuildHasher> fmt::Debug
     for LinkedHashMap<A, B, S>
 {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_map().entries(self).finish()
     }
 }
 
 impl<K: Hash + Eq, V: PartialEq, S: BuildHasher> PartialEq for LinkedHashMap<K, V, S> {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.len() == other.len() && self.iter().eq(other)
     }
@@ -447,34 +470,41 @@ impl<K: Hash + Eq, V: Eq, S: BuildHasher> Eq for LinkedHashMap<K, V, S> {}
 impl<K: Hash + Eq + PartialOrd, V: PartialOrd, S: BuildHasher> PartialOrd
     for LinkedHashMap<K, V, S>
 {
+    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.iter().partial_cmp(other)
     }
 
+    #[inline]
     fn lt(&self, other: &Self) -> bool {
         self.iter().lt(other)
     }
 
+    #[inline]
     fn le(&self, other: &Self) -> bool {
         self.iter().le(other)
     }
 
+    #[inline]
     fn ge(&self, other: &Self) -> bool {
         self.iter().ge(other)
     }
 
+    #[inline]
     fn gt(&self, other: &Self) -> bool {
         self.iter().gt(other)
     }
 }
 
 impl<K: Hash + Eq + Ord, V: Ord, S: BuildHasher> Ord for LinkedHashMap<K, V, S> {
+    #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
         self.iter().cmp(other)
     }
 }
 
 impl<K: Hash + Eq, V: Hash, S: BuildHasher> Hash for LinkedHashMap<K, V, S> {
+    #[inline]
     fn hash<H: Hasher>(&self, h: &mut H) {
         for e in self.iter() {
             e.hash(h);
@@ -486,9 +516,9 @@ impl<K, V, S> Drop for LinkedHashMap<K, V, S> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
-            if !self.values.is_null() {
-                drop_value_nodes(self.values);
-                Box::from_raw(self.values);
+            if let Some(values) = self.values {
+                drop_value_nodes(values);
+                Box::from_raw(values.as_ptr());
             }
             drop_free_nodes(self.free);
         }
@@ -561,6 +591,16 @@ pub enum Entry<'a, K, V, S> {
     Vacant(VacantEntry<'a, K, V, S>),
 }
 
+impl<K: fmt::Debug, V: fmt::Debug, S> fmt::Debug for Entry<'_, K, V, S> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Entry::Vacant(ref v) => f.debug_tuple("Entry").field(v).finish(),
+            Entry::Occupied(ref o) => f.debug_tuple("Entry").field(o).finish(),
+        }
+    }
+}
+
 impl<'a, K, V, S> Entry<'a, K, V, S> {
     #[inline]
     pub fn or_insert(self, default: V) -> &'a mut V
@@ -612,6 +652,16 @@ impl<'a, K, V, S> Entry<'a, K, V, S> {
 pub struct OccupiedEntry<'a, K, V> {
     key: K,
     raw_entry: RawOccupiedEntryMut<'a, K, V>,
+}
+
+impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for OccupiedEntry<'_, K, V> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OccupiedEntry")
+            .field("key", self.key())
+            .field("value", self.get())
+            .finish()
+    }
 }
 
 impl<'a, K, V> OccupiedEntry<'a, K, V> {
@@ -679,6 +729,13 @@ pub struct VacantEntry<'a, K, V, S> {
     raw_entry: RawVacantEntryMut<'a, K, V, S>,
 }
 
+impl<K: fmt::Debug, V, S> fmt::Debug for VacantEntry<'_, K, V, S> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("VacantEntry").field(self.key()).finish()
+    }
+}
+
 impl<'a, K, V, S> VacantEntry<'a, K, V, S> {
     #[inline]
     pub fn key(&self) -> &K {
@@ -702,7 +759,7 @@ impl<'a, K, V, S> VacantEntry<'a, K, V, S> {
 
 pub struct RawEntryBuilder<'a, K, V, S> {
     hash_builder: &'a S,
-    entry: hash_map::RawEntryBuilder<'a, *mut Node<K, V>, (), NullHasher>,
+    entry: hash_map::RawEntryBuilder<'a, NonNull<Node<K, V>>, (), NullHasher>,
 }
 
 impl<'a, K, V, S> RawEntryBuilder<'a, K, V, S>
@@ -737,10 +794,10 @@ where
         unsafe {
             let node = *self
                 .entry
-                .from_hash(hash, move |k| is_match((**k).key_ref()))?
+                .from_hash(hash, move |k| is_match((*k).as_ref().key_ref()))?
                 .0;
 
-            Some(((*node).key_ref(), (*node).value_ref()))
+            Some(((*node.as_ptr()).key_ref(), (*node.as_ptr()).value_ref()))
         }
     }
 }
@@ -763,9 +820,9 @@ where
 
 pub struct RawEntryBuilderMut<'a, K, V, S> {
     hash_builder: &'a S,
-    values: &'a mut *mut Node<K, V>,
-    free: &'a mut *mut Node<K, V>,
-    entry: hash_map::RawEntryBuilderMut<'a, *mut Node<K, V>, (), NullHasher>,
+    values: &'a mut Option<NonNull<Node<K, V>>>,
+    free: &'a mut Option<NonNull<Node<K, V>>>,
+    entry: hash_map::RawEntryBuilderMut<'a, NonNull<Node<K, V>>, (), NullHasher>,
 }
 
 impl<'a, K, V, S> RawEntryBuilderMut<'a, K, V, S>
@@ -799,7 +856,7 @@ where
     ) -> RawEntryMut<'a, K, V, S> {
         let entry = self
             .entry
-            .from_hash(hash, move |k| is_match(unsafe { (**k).key_ref() }));
+            .from_hash(hash, move |k| is_match(unsafe { (*k).as_ref().key_ref() }));
 
         match entry {
             hash_map::RawEntryMut::Occupied(occupied) => {
@@ -888,9 +945,9 @@ impl<'a, K, V, S> RawEntryMut<'a, K, V, S> {
 }
 
 pub struct RawOccupiedEntryMut<'a, K, V> {
-    free: &'a mut *mut Node<K, V>,
-    values: &'a mut *mut Node<K, V>,
-    entry: hash_map::RawOccupiedEntryMut<'a, *mut Node<K, V>, ()>,
+    free: &'a mut Option<NonNull<Node<K, V>>>,
+    values: &'a mut Option<NonNull<Node<K, V>>>,
+    entry: hash_map::RawOccupiedEntryMut<'a, NonNull<Node<K, V>>, ()>,
 }
 
 impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
@@ -928,7 +985,7 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
     pub fn get_key_value(&self) -> (&K, &V) {
         unsafe {
             let node = *self.entry.key();
-            ((*node).key_ref(), (*node).value_ref())
+            ((*node.as_ptr()).key_ref(), (*node.as_ptr()).value_ref())
         }
     }
 
@@ -936,7 +993,7 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
     pub fn get_key_value_mut(&mut self) -> (&mut K, &mut V) {
         unsafe {
             let node = *self.entry.key_mut();
-            ((*node).key_mut(), (*node).value_mut())
+            ((*node.as_ptr()).key_mut(), (*node.as_ptr()).value_mut())
         }
     }
 
@@ -944,7 +1001,7 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
     pub fn into_key_value(self) -> (&'a mut K, &'a mut V) {
         unsafe {
             let node = *self.entry.into_key();
-            ((*node).key_mut(), (*node).value_mut())
+            ((*node.as_ptr()).key_mut(), (*node.as_ptr()).value_mut())
         }
     }
 
@@ -953,7 +1010,7 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
         unsafe {
             let node = *self.entry.key_mut();
             detach_node(node);
-            attach_before(node, *self.values);
+            attach_before(node, NonNull::new_unchecked(self.values.as_ptr()));
         }
     }
 
@@ -962,23 +1019,23 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
         unsafe {
             let node = *self.entry.key_mut();
             detach_node(node);
-            attach_before(node, (**self.values).next);
+            attach_before(node, (*self.values.as_ptr()).links.value.next);
         }
     }
 
     #[inline]
     pub fn insert(&mut self, value: V) -> V {
         unsafe {
-            let node = *self.entry.key_mut();
-            mem::replace((*node).value_mut(), value)
+            let mut node = *self.entry.key_mut();
+            mem::replace(node.as_mut().value_mut(), value)
         }
     }
 
     #[inline]
     pub fn insert_key(&mut self, key: K) -> K {
         unsafe {
-            let node = *self.entry.key_mut();
-            mem::replace((*node).key_mut(), key)
+            let mut node = *self.entry.key_mut();
+            mem::replace(node.as_mut().key_mut(), key)
         }
     }
 
@@ -996,9 +1053,9 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
 
 pub struct RawVacantEntryMut<'a, K, V, S> {
     hash_builder: &'a S,
-    values: &'a mut *mut Node<K, V>,
-    free: &'a mut *mut Node<K, V>,
-    entry: hash_map::RawVacantEntryMut<'a, *mut Node<K, V>, (), NullHasher>,
+    values: &'a mut Option<NonNull<Node<K, V>>>,
+    free: &'a mut Option<NonNull<Node<K, V>>>,
+    entry: hash_map::RawVacantEntryMut<'a, NonNull<Node<K, V>>, (), NullHasher>,
 }
 
 impl<'a, K, V, S> RawVacantEntryMut<'a, K, V, S> {
@@ -1035,18 +1092,59 @@ impl<'a, K, V, S> RawVacantEntryMut<'a, K, V, S> {
     {
         unsafe {
             ensure_guard_node(self.values);
-            let new_node = allocate_node(self.free);
-            (*new_node).put_key(key);
-            (*new_node).put_value(value);
-            attach_before(new_node, *self.values);
+            let mut new_node = allocate_node(self.free);
+            new_node.as_mut().put_key(key);
+            new_node.as_mut().put_value(value);
+            attach_before(new_node, NonNull::new_unchecked(self.values.as_ptr()));
 
             let node = *self
                 .entry
-                .insert_with_hasher(hash, new_node, (), move |k| hasher((**k).key_ref()))
+                .insert_with_hasher(hash, new_node, (), move |k| hasher((*k).as_ref().key_ref()))
                 .0;
 
-            ((*node).key_mut(), (*node).value_mut())
+            ((*node.as_ptr()).key_mut(), (*node.as_ptr()).value_mut())
         }
+    }
+}
+
+impl<K, V, S> fmt::Debug for RawEntryBuilderMut<'_, K, V, S> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RawEntryBuilder").finish()
+    }
+}
+
+impl<K: fmt::Debug, V: fmt::Debug, S> fmt::Debug for RawEntryMut<'_, K, V, S> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            RawEntryMut::Vacant(ref v) => f.debug_tuple("RawEntry").field(v).finish(),
+            RawEntryMut::Occupied(ref o) => f.debug_tuple("RawEntry").field(o).finish(),
+        }
+    }
+}
+
+impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for RawOccupiedEntryMut<'_, K, V> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RawOccupiedEntryMut")
+            .field("key", self.key())
+            .field("value", self.get())
+            .finish()
+    }
+}
+
+impl<K, V, S> fmt::Debug for RawVacantEntryMut<'_, K, V, S> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RawVacantEntryMut").finish()
+    }
+}
+
+impl<K, V, S> fmt::Debug for RawEntryBuilder<'_, K, V, S> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RawEntryBuilder").finish()
     }
 }
 
@@ -1088,25 +1186,62 @@ pub struct Iter<'a, K, V> {
 }
 
 pub struct IterMut<'a, K, V> {
-    head: *mut Node<K, V>,
-    tail: *mut Node<K, V>,
+    head: Option<NonNull<Node<K, V>>>,
+    tail: Option<NonNull<Node<K, V>>>,
     remaining: usize,
     marker: PhantomData<(&'a K, &'a mut V)>,
 }
 
 pub struct IntoIter<K, V> {
-    head: *mut Node<K, V>,
-    tail: *mut Node<K, V>,
+    head: Option<NonNull<Node<K, V>>>,
+    tail: Option<NonNull<Node<K, V>>>,
     remaining: usize,
     marker: PhantomData<(K, V)>,
 }
 
 pub struct Drain<'a, K, V> {
-    free: &'a mut *mut Node<K, V>,
-    head: *mut Node<K, V>,
-    tail: *mut Node<K, V>,
+    free: Option<NonNull<Option<NonNull<Node<K, V>>>>>,
+    head: Option<NonNull<Node<K, V>>>,
+    tail: Option<NonNull<Node<K, V>>>,
     remaining: usize,
-    marker: PhantomData<(K, V)>,
+    // We want `Drain` to be covariant
+    marker: PhantomData<(K, V, &'a LinkedHashMap<K, V>)>,
+}
+
+impl<K, V> IterMut<'_, K, V> {
+    #[inline]
+    pub(crate) fn iter(&self) -> Iter<'_, K, V> {
+        Iter {
+            head: self.head.as_ptr(),
+            tail: self.tail.as_ptr(),
+            remaining: self.remaining,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<K, V> IntoIter<K, V> {
+    #[inline]
+    pub(crate) fn iter(&self) -> Iter<'_, K, V> {
+        Iter {
+            head: self.head.as_ptr(),
+            tail: self.tail.as_ptr(),
+            remaining: self.remaining,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<K, V> Drain<'_, K, V> {
+    #[inline]
+    pub(crate) fn iter(&self) -> Iter<'_, K, V> {
+        Iter {
+            head: self.head.as_ptr(),
+            tail: self.tail.as_ptr(),
+            remaining: self.remaining,
+            marker: PhantomData,
+        }
+    }
 }
 
 unsafe impl<'a, K, V> Send for Iter<'a, K, V>
@@ -1172,18 +1307,58 @@ impl<'a, K, V> Clone for Iter<'a, K, V> {
     }
 }
 
+impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for Iter<'_, K, V> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.clone()).finish()
+    }
+}
+
+impl<K, V> fmt::Debug for IterMut<'_, K, V>
+where
+    K: fmt::Debug,
+    V: fmt::Debug,
+{
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
+impl<K, V> fmt::Debug for IntoIter<K, V>
+where
+    K: fmt::Debug,
+    V: fmt::Debug,
+{
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
+impl<K, V> fmt::Debug for Drain<'_, K, V>
+where
+    K: fmt::Debug,
+    V: fmt::Debug,
+{
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
 impl<'a, K, V> Iterator for Iter<'a, K, V> {
     type Item = (&'a K, &'a V);
 
     #[inline]
     fn next(&mut self) -> Option<(&'a K, &'a V)> {
-        if self.head == self.tail {
+        if self.remaining == 0 {
             None
         } else {
             self.remaining -= 1;
             unsafe {
                 let r = Some(((*self.head).key_ref(), (*self.head).value_ref()));
-                self.head = (*self.head).next;
+                self.head = (*self.head).links.value.next.as_ptr();
                 r
             }
         }
@@ -1200,13 +1375,14 @@ impl<'a, K, V> Iterator for IterMut<'a, K, V> {
 
     #[inline]
     fn next(&mut self) -> Option<(&'a K, &'a mut V)> {
-        if self.head == self.tail {
+        if self.remaining == 0 {
             None
         } else {
             self.remaining -= 1;
             unsafe {
-                let r = Some(((*self.head).key_ref(), (*self.head).value_mut()));
-                self.head = (*self.head).next;
+                let head = self.head.as_ptr();
+                let r = Some(((*head).key_ref(), (*head).value_mut()));
+                self.head = Some((*head).links.value.next);
                 r
             }
         }
@@ -1228,9 +1404,9 @@ impl<K, V> Iterator for IntoIter<K, V> {
         }
         self.remaining -= 1;
         unsafe {
-            let next = (*self.head).next;
-            let mut e = *Box::from_raw(self.head);
-            self.head = next;
+            let head = self.head.as_ptr();
+            self.head = Some((*head).links.value.next);
+            let mut e = Box::from_raw(head);
             Some((e.take_key(), e.take_value()))
         }
     }
@@ -1251,11 +1427,11 @@ impl<'a, K, V> Iterator for Drain<'a, K, V> {
         }
         self.remaining -= 1;
         unsafe {
-            let key = (*self.head).take_key();
-            let value = (*self.head).take_value();
-            let next = (*self.head).next;
-            push_free(self.free, self.head);
-            self.head = next;
+            let mut head = NonNull::new_unchecked(self.head.as_ptr());
+            self.head = Some(head.as_ref().links.value.next);
+            let key = head.as_mut().take_key();
+            let value = head.as_mut().take_value();
+            push_free(&mut *self.free.as_ptr(), head);
             Some((key, value))
         }
     }
@@ -1269,13 +1445,14 @@ impl<'a, K, V> Iterator for Drain<'a, K, V> {
 impl<'a, K, V> DoubleEndedIterator for Iter<'a, K, V> {
     #[inline]
     fn next_back(&mut self) -> Option<(&'a K, &'a V)> {
-        if self.head == self.tail {
+        if self.remaining == 0 {
             None
         } else {
             self.remaining -= 1;
             unsafe {
-                self.tail = (*self.tail).prev;
-                Some(((*self.tail).key_ref(), (*self.tail).value_ref()))
+                let tail = self.tail;
+                self.tail = (*tail).links.value.prev.as_ptr();
+                Some(((*tail).key_ref(), (*tail).value_ref()))
             }
         }
     }
@@ -1284,13 +1461,14 @@ impl<'a, K, V> DoubleEndedIterator for Iter<'a, K, V> {
 impl<'a, K, V> DoubleEndedIterator for IterMut<'a, K, V> {
     #[inline]
     fn next_back(&mut self) -> Option<(&'a K, &'a mut V)> {
-        if self.head == self.tail {
+        if self.remaining == 0 {
             None
         } else {
             self.remaining -= 1;
             unsafe {
-                self.tail = (*self.tail).prev;
-                Some(((*self.tail).key_ref(), (*self.tail).value_mut()))
+                let tail = self.tail.as_ptr();
+                self.tail = Some((*tail).links.value.prev);
+                Some(((*tail).key_ref(), (*tail).value_mut()))
             }
         }
     }
@@ -1304,9 +1482,8 @@ impl<K, V> DoubleEndedIterator for IntoIter<K, V> {
         }
         self.remaining -= 1;
         unsafe {
-            let prev = (*self.tail).prev;
-            let mut e = *Box::from_raw(self.tail);
-            self.tail = prev;
+            let mut e = *Box::from_raw(self.tail.as_ptr());
+            self.tail = Some(e.links.value.prev);
             Some((e.take_key(), e.take_value()))
         }
     }
@@ -1320,11 +1497,11 @@ impl<'a, K, V> DoubleEndedIterator for Drain<'a, K, V> {
         }
         self.remaining -= 1;
         unsafe {
-            let key = (*self.tail).take_key();
-            let value = (*self.tail).take_value();
-            let prev = (*self.tail).prev;
-            push_free(self.free, self.tail);
-            self.tail = prev;
+            let mut tail = NonNull::new_unchecked(self.tail.as_ptr());
+            self.tail = Some(tail.as_ref().links.value.prev);
+            let key = tail.as_mut().take_key();
+            let value = tail.as_mut().take_value();
+            push_free(&mut *self.free.as_ptr(), tail);
             Some((key, value))
         }
     }
@@ -1341,11 +1518,11 @@ impl<K, V> Drop for IntoIter<K, V> {
     fn drop(&mut self) {
         for _ in 0..self.remaining {
             unsafe {
-                let prev = (*self.tail).prev;
-                (*self.tail).take_key();
-                (*self.tail).take_value();
-                Box::from_raw(self.tail);
-                self.tail = prev;
+                let tail = self.tail.as_ptr();
+                self.tail = Some((*tail).links.value.prev);
+                (*tail).take_key();
+                (*tail).take_value();
+                Box::from_raw(tail);
             }
         }
     }
@@ -1356,11 +1533,11 @@ impl<'a, K, V> Drop for Drain<'a, K, V> {
     fn drop(&mut self) {
         for _ in 0..self.remaining {
             unsafe {
-                let prev = (*self.tail).prev;
-                (*self.tail).take_key();
-                (*self.tail).take_value();
-                push_free(self.free, self.tail);
-                self.tail = prev;
+                let mut tail = NonNull::new_unchecked(self.tail.as_ptr());
+                self.tail = Some(tail.as_ref().links.value.prev);
+                tail.as_mut().take_key();
+                tail.as_mut().take_value();
+                push_free(&mut *self.free.as_ptr(), tail);
             }
         }
     }
@@ -1370,7 +1547,15 @@ pub struct Keys<'a, K, V> {
     inner: Iter<'a, K, V>,
 }
 
+impl<K: fmt::Debug, V> fmt::Debug for Keys<'_, K, V> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.clone()).finish()
+    }
+}
+
 impl<'a, K, V> Clone for Keys<'a, K, V> {
+    #[inline]
     fn clone(&self) -> Keys<'a, K, V> {
         Keys {
             inner: self.inner.clone(),
@@ -1406,9 +1591,24 @@ impl<'a, K, V> ExactSizeIterator for Keys<'a, K, V> {
     }
 }
 
-#[derive(Clone)]
 pub struct Values<'a, K, V> {
     inner: Iter<'a, K, V>,
+}
+
+impl<K, V> Clone for Values<'_, K, V> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Values {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl<K, V: fmt::Debug> fmt::Debug for Values<'_, K, V> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.clone()).finish()
+    }
 }
 
 impl<'a, K, V> Iterator for Values<'a, K, V> {
@@ -1441,6 +1641,17 @@ impl<'a, K, V> ExactSizeIterator for Values<'a, K, V> {
 
 pub struct ValuesMut<'a, K, V> {
     inner: IterMut<'a, K, V>,
+}
+
+impl<K, V> fmt::Debug for ValuesMut<'_, K, V>
+where
+    K: fmt::Debug,
+    V: fmt::Debug,
+{
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.inner.iter()).finish()
+    }
 }
 
 impl<'a, K, V> Iterator for ValuesMut<'a, K, V> {
@@ -1498,21 +1709,23 @@ impl<K: Hash + Eq, V, S: BuildHasher> IntoIterator for LinkedHashMap<K, V, S> {
     #[inline]
     fn into_iter(mut self) -> IntoIter<K, V> {
         unsafe {
-            let (head, tail) = if !self.values.is_null() {
-                let head = (*self.values).next;
-                let tail = (*self.values).prev;
+            let (head, tail) = if let Some(values) = self.values {
+                let ValueLinks {
+                    next: head,
+                    prev: tail,
+                } = values.as_ref().links.value;
 
-                Box::from_raw(self.values);
-                self.values = ptr::null_mut();
+                Box::from_raw(self.values.as_ptr());
+                self.values = None;
 
-                (head, tail)
+                (Some(head), Some(tail))
             } else {
-                (ptr::null_mut(), ptr::null_mut())
+                (None, None)
             };
             let len = self.len();
 
             drop_free_nodes(self.free);
-            self.free = ptr::null_mut();
+            self.free = None;
 
             self.map.clear();
 
@@ -1550,11 +1763,45 @@ impl Hasher for NullHasher {
     }
 }
 
+struct ValueLinks<K, V> {
+    next: NonNull<Node<K, V>>,
+    prev: NonNull<Node<K, V>>,
+}
+
+impl<K, V> Clone for ValueLinks<K, V> {
+    #[inline]
+    fn clone(&self) -> Self {
+        ValueLinks {
+            next: self.next,
+            prev: self.prev,
+        }
+    }
+}
+
+impl<K, V> Copy for ValueLinks<K, V> {}
+
+struct FreeLink<K, V> {
+    next: Option<NonNull<Node<K, V>>>,
+}
+
+impl<K, V> Clone for FreeLink<K, V> {
+    #[inline]
+    fn clone(&self) -> Self {
+        FreeLink { next: self.next }
+    }
+}
+
+impl<K, V> Copy for FreeLink<K, V> {}
+
+union Links<K, V> {
+    value: ValueLinks<K, V>,
+    free: FreeLink<K, V>,
+}
+
 struct Node<K, V> {
     key: MaybeUninit<K>,
     value: MaybeUninit<V>,
-    next: *mut Node<K, V>,
-    prev: *mut Node<K, V>,
+    links: Links<K, V>,
 }
 
 impl<K, V> Node<K, V> {
@@ -1599,77 +1846,112 @@ impl<K, V> Node<K, V> {
     }
 }
 
+trait OptNonNullExt<T> {
+    #[inline]
+    fn as_ptr(self) -> *mut T;
+}
+
+impl<T> OptNonNullExt<T> for Option<NonNull<T>> {
+    #[inline]
+    fn as_ptr(self) -> *mut T {
+        match self {
+            Some(ptr) => ptr.as_ptr(),
+            None => ptr::null_mut(),
+        }
+    }
+}
+
 // Allocate a circular list guard node if not present.
 #[inline]
-unsafe fn ensure_guard_node<K, V>(head: &mut *mut Node<K, V>) {
-    if head.is_null() {
-        *head = Box::into_raw(Box::new(Node {
+unsafe fn ensure_guard_node<K, V>(head: &mut Option<NonNull<Node<K, V>>>) {
+    if head.is_none() {
+        let mut p = NonNull::new_unchecked(Box::into_raw(Box::new(Node {
             key: MaybeUninit::uninit(),
             value: MaybeUninit::uninit(),
-            next: ptr::null_mut(),
-            prev: ptr::null_mut(),
-        }));
-        (**head).next = *head;
-        (**head).prev = *head;
+            links: Links {
+                value: ValueLinks {
+                    next: NonNull::dangling(),
+                    prev: NonNull::dangling(),
+                },
+            },
+        })));
+        p.as_mut().links.value = ValueLinks { next: p, prev: p };
+        *head = Some(p);
     }
 }
 
 // Attach the `to_attach` node to the existing circular list *before* `node`.
 #[inline]
-unsafe fn attach_before<K, V>(to_attach: *mut Node<K, V>, node: *mut Node<K, V>) {
-    (*to_attach).prev = (*node).prev;
-    (*to_attach).next = node;
-    (*node).prev = to_attach;
-    (*(*to_attach).prev).next = to_attach;
+unsafe fn attach_before<K, V>(mut to_attach: NonNull<Node<K, V>>, mut node: NonNull<Node<K, V>>) {
+    to_attach.as_mut().links.value = ValueLinks {
+        prev: node.as_ref().links.value.prev,
+        next: node,
+    };
+    node.as_mut().links.value.prev = to_attach;
+    (*to_attach.as_mut().links.value.prev.as_ptr())
+        .links
+        .value
+        .next = to_attach;
 }
 
 #[inline]
-unsafe fn detach_node<K, V>(node: *mut Node<K, V>) {
-    (*(*node).prev).next = (*node).next;
-    (*(*node).next).prev = (*node).prev;
+unsafe fn detach_node<K, V>(mut node: NonNull<Node<K, V>>) {
+    node.as_mut().links.value.prev.as_mut().links.value.next = node.as_ref().links.value.next;
+    node.as_mut().links.value.next.as_mut().links.value.prev = node.as_ref().links.value.prev;
 }
 
 #[inline]
-unsafe fn push_free<K, V>(free_list: &mut *mut Node<K, V>, node: *mut Node<K, V>) {
-    (*node).next = *free_list;
-    *free_list = node;
+unsafe fn push_free<K, V>(
+    free_list: &mut Option<NonNull<Node<K, V>>>,
+    mut node: NonNull<Node<K, V>>,
+) {
+    node.as_mut().links.free.next = *free_list;
+    *free_list = Some(node);
 }
 
 #[inline]
-unsafe fn pop_free<K, V>(free_list: &mut *mut Node<K, V>) -> *mut Node<K, V> {
-    if !free_list.is_null() {
-        let free = *free_list;
-        *free_list = (*free).next;
-        free
+unsafe fn pop_free<K, V>(
+    free_list: &mut Option<NonNull<Node<K, V>>>,
+) -> Option<NonNull<Node<K, V>>> {
+    if let Some(free) = *free_list {
+        *free_list = free.as_ref().links.free.next;
+        Some(free)
     } else {
-        ptr::null_mut()
+        None
     }
 }
 
 #[inline]
-unsafe fn allocate_node<K, V>(free_list: &mut *mut Node<K, V>) -> *mut Node<K, V> {
-    let free = pop_free(free_list);
-    if free.is_null() {
-        Box::into_raw(Box::new(Node {
+unsafe fn allocate_node<K, V>(free_list: &mut Option<NonNull<Node<K, V>>>) -> NonNull<Node<K, V>> {
+    if let Some(mut free) = pop_free(free_list) {
+        free.as_mut().links.value = ValueLinks {
+            next: NonNull::dangling(),
+            prev: NonNull::dangling(),
+        };
+        free
+    } else {
+        NonNull::new_unchecked(Box::into_raw(Box::new(Node {
             key: MaybeUninit::uninit(),
             value: MaybeUninit::uninit(),
-            next: ptr::null_mut(),
-            prev: ptr::null_mut(),
-        }))
-    } else {
-        free
+            links: Links {
+                value: ValueLinks {
+                    next: NonNull::dangling(),
+                    prev: NonNull::dangling(),
+                },
+            },
+        })))
     }
 }
 
 // Given node is assumed to be the guard node and is *not* dropped.
 #[inline]
-unsafe fn drop_value_nodes<K, V>(guard: *mut Node<K, V>) {
-    let mut cur = (*guard).prev;
+unsafe fn drop_value_nodes<K, V>(guard: NonNull<Node<K, V>>) {
+    let mut cur = guard.as_ref().links.value.prev;
     while cur != guard {
-        let prev = (*cur).prev;
-        (*cur).take_key();
-        (*cur).take_value();
-        Box::from_raw(cur);
+        let prev = cur.as_ref().links.value.prev;
+        cur.as_mut().take_key();
+        cur.as_mut().take_value();
+        Box::from_raw(cur.as_ptr());
         cur = prev;
     }
 }
@@ -1677,20 +1959,23 @@ unsafe fn drop_value_nodes<K, V>(guard: *mut Node<K, V>) {
 // Drops all linked free nodes starting with the given node.  Free nodes are only non-circular
 // singly linked, and should have uninitialized keys / values.
 #[inline]
-unsafe fn drop_free_nodes<K, V>(mut free: *mut Node<K, V>) {
-    while !free.is_null() {
-        let next_free = (*free).next;
-        Box::from_raw(free);
+unsafe fn drop_free_nodes<K, V>(mut free: Option<NonNull<Node<K, V>>>) {
+    while let Some(some_free) = free {
+        let next_free = some_free.as_ref().links.free.next;
+        Box::from_raw(some_free.as_ptr());
         free = next_free;
     }
 }
 
 #[inline]
-unsafe fn remove_node<K, V>(free_list: &mut *mut Node<K, V>, node: *mut Node<K, V>) -> (K, V) {
+unsafe fn remove_node<K, V>(
+    free_list: &mut Option<NonNull<Node<K, V>>>,
+    mut node: NonNull<Node<K, V>>,
+) -> (K, V) {
     detach_node(node);
     push_free(free_list, node);
-    let key = (*node).take_key();
-    let value = (*node).take_value();
+    let key = node.as_mut().take_key();
+    let value = node.as_mut().take_value();
     (key, value)
 }
 
