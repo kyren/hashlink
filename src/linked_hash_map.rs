@@ -198,8 +198,64 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
         }
     }
 
+    pub fn retain<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&K, &mut V) -> bool,
+    {
+        // We do not drop the key and value when a value is filtered from the map during the call to
+        // `retain`.  We need to be very careful not to have a live `HashMap` entry pointing to
+        // either a dangling `Node` or a `Node` with dropped keys / values.  Since the key and value
+        // types may panic on drop, they may short-circuit the entry in the map actually being
+        // removed.  Instead, we push the removed nodes onto the free list eagerly, then try and
+        // drop the keys and values for any newly freed nodes *after* `HashMap::retain` has
+        // completely finished.
+        struct DropFilteredValues<K, V> {
+            start_free: *mut Node<K, V>,
+            cur_free: *mut Node<K, V>,
+        }
+
+        impl<K, V> DropFilteredValues<K, V> {
+            fn drop_later(&mut self, node: *mut Node<K, V>) {
+                unsafe {
+                    detach_node(node);
+                    push_free(&mut self.cur_free, node);
+                }
+            }
+        }
+
+        impl<K, V> Drop for DropFilteredValues<K, V> {
+            fn drop(&mut self) {
+                unsafe {
+                    while self.cur_free != self.start_free {
+                        (*self.cur_free).take_key();
+                        (*self.cur_free).take_value();
+                        self.cur_free = (*self.cur_free).next;
+                    }
+                }
+            }
+        }
+
+        let mut drop_filtered_values = DropFilteredValues {
+            start_free: self.free,
+            cur_free: self.free,
+        };
+
+        self.map.retain(|&node, _| unsafe {
+            if f((*node).key_ref(), (*node).value_mut()) {
+                true
+            } else {
+                drop_filtered_values.drop_later(node);
+                false
+            }
+        });
+    }
+
     pub fn hasher(&self) -> &S {
         &self.hash_builder
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.map.capacity()
     }
 }
 
@@ -1310,9 +1366,16 @@ impl<'a, K, V> Drop for Drain<'a, K, V> {
     }
 }
 
-#[derive(Clone)]
 pub struct Keys<'a, K, V> {
     inner: Iter<'a, K, V>,
+}
+
+impl<'a, K, V> Clone for Keys<'a, K, V> {
+    fn clone(&self) -> Keys<'a, K, V> {
+        Keys {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 impl<'a, K, V> Iterator for Keys<'a, K, V> {
