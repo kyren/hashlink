@@ -1,10 +1,7 @@
-This is a (fairly divergent) fork of
-[linked-hash-map](https://github.com/contain-rs/linked-hash-map) that adds some
-missing APIs.
-
-It is based on the `HashMap` directly from the `hashbrown` crate, rather than
-the one in `std`, and it offers a "raw" `HashMap` API that mimics the one in
-`hashbrown`.
+This crate is a fork of 
+[linked-hash-map](https://github.com/contain-rs/linked-hash-map) that builds on
+top of [hashbrown](https://github.com/rust-lang/hashbrown) to implement more up
+to date versions of `LinkedHashMap` `LinkedHashSet`, and `LruCache`.
 
 The most important API change is that when a `LinkedHashMap` is used as a LRU
 cache, it allows you to do things like this to avoid repeated key hashing and
@@ -12,27 +9,32 @@ lookups:
 
 ``` rust
 let mut lru_cache = LinkedHashMap::new();
-// Try to find my expensive to hash key
-let cached_val = match lru_cache.entry("key") {
-    Entry::Occupied(occupied) => {
+let key = "key";
+// Try to find my expensive to construct and hash key
+let cached_val = match lru_cache.raw_entry_mut(key) {
+    RawEntryMut::Occupied(occupied) => {
         // Cache hit, move entry to the back.
         occupied.to_back();
         occupied.get_mut()
     }
-    Entry::Vacant(vacant) => {
-        // Insert expensive to compute value, automatically inserted at the back.
-        vacant.insert(42)
+    RawEntryMut::Vacant(vacant) => {
+        // Insert expensive to construct key and expensive to compute value,
+        // automatically inserted at the back.
+        vacant.insert(key.clone(), 42)
     }
 };
 ```
 
-Right now this crate is still WIP, but has a working `LinkedHashMap` and a
-`LruCache` wrapper type.  Eventually this crate will also have a `LinkedHashSet`
-implementation.
-
 This crate contains a decent amount of unsafe code from handling its internal
-linked list.  Probably do not use this for anything important until I and more
-importantly others have had more time to carefully review it.
+linked list, and the unsafe code has diverged quite a lot from the original
+`linked-hash-map` implementation.  As such, it should probably receive a lot
+more review and testing before you place any kind of serious trust in it.
+
+## Credit
+
+There is a huge amount of code in this crate that is copied verbatim from
+`linked-hash-map` and `hashbrown`, especially tests, associated types like
+iterators, and things like `Debug` impls.
 
 ## License
 
