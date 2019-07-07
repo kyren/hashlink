@@ -1,6 +1,9 @@
 use std::{
     borrow::Borrow,
+    cmp::Ordering,
+    fmt,
     hash::{BuildHasher, Hash, Hasher},
+    iter::FromIterator,
     marker::PhantomData,
     mem::{self, MaybeUninit},
     ops::{Index, IndexMut},
@@ -357,6 +360,69 @@ where
     #[inline]
     fn default() -> Self {
         Self::with_hasher(S::default())
+    }
+}
+
+impl<K: Hash + Eq, V, S: BuildHasher + Default> FromIterator<(K, V)> for LinkedHashMap<K, V, S> {
+    fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Self {
+        let iter = iter.into_iter();
+        let mut map = Self::with_capacity_and_hasher(iter.size_hint().0, S::default());
+        map.extend(iter);
+        map
+    }
+}
+
+impl<A: fmt::Debug + Hash + Eq, B: fmt::Debug, S: BuildHasher> fmt::Debug
+    for LinkedHashMap<A, B, S>
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_map().entries(self).finish()
+    }
+}
+
+impl<K: Hash + Eq, V: PartialEq, S: BuildHasher> PartialEq for LinkedHashMap<K, V, S> {
+    fn eq(&self, other: &Self) -> bool {
+        self.len() == other.len() && self.iter().eq(other)
+    }
+}
+
+impl<K: Hash + Eq, V: Eq, S: BuildHasher> Eq for LinkedHashMap<K, V, S> {}
+
+impl<K: Hash + Eq + PartialOrd, V: PartialOrd, S: BuildHasher> PartialOrd
+    for LinkedHashMap<K, V, S>
+{
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.iter().partial_cmp(other)
+    }
+
+    fn lt(&self, other: &Self) -> bool {
+        self.iter().lt(other)
+    }
+
+    fn le(&self, other: &Self) -> bool {
+        self.iter().le(other)
+    }
+
+    fn ge(&self, other: &Self) -> bool {
+        self.iter().ge(other)
+    }
+
+    fn gt(&self, other: &Self) -> bool {
+        self.iter().gt(other)
+    }
+}
+
+impl<K: Hash + Eq + Ord, V: Ord, S: BuildHasher> Ord for LinkedHashMap<K, V, S> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.iter().cmp(other)
+    }
+}
+
+impl<K: Hash + Eq, V: Hash, S: BuildHasher> Hash for LinkedHashMap<K, V, S> {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        for e in self.iter() {
+            e.hash(h);
+        }
     }
 }
 
