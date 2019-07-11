@@ -9,18 +9,18 @@ lookups:
 
 ``` rust
 let mut lru_cache = LinkedHashMap::new();
-let key = "key";
+let key = "key".to_owned();
 // Try to find my expensive to construct and hash key
-let cached_val = match lru_cache.raw_entry_mut(key) {
-    RawEntryMut::Occupied(occupied) => {
+let _cached_val = match lru_cache.raw_entry_mut().from_key(&key) {
+    RawEntryMut::Occupied(mut occupied) => {
         // Cache hit, move entry to the back.
         occupied.to_back();
-        occupied.get_mut()
+        occupied.into_mut()
     }
     RawEntryMut::Vacant(vacant) => {
         // Insert expensive to construct key and expensive to compute value,
         // automatically inserted at the back.
-        vacant.insert(key.clone(), 42)
+        vacant.insert(key.clone(), 42).1
     }
 };
 ```
@@ -39,8 +39,9 @@ iterators, and things like `Debug` impls.
 ## License
 
 This library is licensed the same as
-[linked-hash-map](https://github.com/contain-rs/linked-hash-map), it is licensed
-under either of:
+[linked-hash-map](https://github.com/contain-rs/linked-hash-map) and
+[hashbrown](https://github.com/rust-lang/hashbrown), it is licensed under either
+of:
 
 * MIT license [LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT
 * Apache License 2.0 [LICENSE-APACHE](LICENSE-APACHE) or https://opensource.org/licenses/Apache-2.0
