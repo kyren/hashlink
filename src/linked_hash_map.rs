@@ -12,6 +12,21 @@ use std::{
 
 use hashbrown::{hash_map, HashMap};
 
+/// A version of `HashMap` that has a user controllable order for its entries.
+///
+/// It achieves this by keeping its entries in an internal linked list and using a `HashMap` to
+/// point at nodes in this linked list. 
+///
+/// The order of entries defaults to "insertion order", but the user can also modify the order of
+/// existing entries by manually moving them to the front or back.
+///
+/// There are two kinds of methods that modify the order of the internal list:
+///
+/// * Methods that have names like `to_front` and `to_back` will unsurprisingly move an existing
+///   entry to the front or back
+/// * Methods that have the word `insert` will insert a new entry ot the back of the list, and if
+///   that method might replace an entry, that method will *also move that existing entry to the
+///   back*.
 pub struct LinkedHashMap<K, V, S = hash_map::DefaultHashBuilder> {
     map: HashMap<NonNull<Node<K, V>>, (), NullHasher>,
     // We need to keep any custom hash builder outside of the HashMap so we can access it alongside
@@ -204,7 +219,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
     }
 
     #[inline]
-    pub fn back(&mut self) -> Option<(&K, &V)> {
+    pub fn back(&self) -> Option<(&K, &V)> {
         if self.is_empty() {
             return None;
         }
@@ -341,12 +356,16 @@ where
         }
     }
 
+    /// Inserts the given key / value pair at the *back* of the internal linked list.
+    ///
+    /// Returns the previously set value, if one existed prior to this call.  After this call,
+    /// calling `LinkedHashMap::back` will return a reference to this key / value pair.
     #[inline]
     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
         match self.raw_entry_mut().from_key(&k) {
             RawEntryMut::Occupied(mut occupied) => {
                 occupied.to_back();
-                Some(occupied.insert(v))
+                Some(occupied.replace_value(v))
             }
             RawEntryMut::Vacant(vacant) => {
                 vacant.insert(k, v);
@@ -604,6 +623,11 @@ impl<K: fmt::Debug, V: fmt::Debug, S> fmt::Debug for Entry<'_, K, V, S> {
 }
 
 impl<'a, K, V, S> Entry<'a, K, V, S> {
+    /// If this entry is vacant, inserts a new entry with the given value and returns a reference to
+    /// it.
+    ///
+    /// If this entry is occupied, this method *moves the occupied entry to the back of the internal
+    /// linked list* and returns a reference to the existing value.
     #[inline]
     pub fn or_insert(self, default: V) -> &'a mut V
     where
@@ -611,11 +635,16 @@ impl<'a, K, V, S> Entry<'a, K, V, S> {
         S: BuildHasher,
     {
         match self {
-            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Occupied(mut entry) => {
+                entry.to_back();
+                entry.into_mut()
+            },
             Entry::Vacant(entry) => entry.insert(default),
         }
     }
 
+    /// Similar to `Entry::or_insert`, but accepts a function to construct a new value if this entry
+    /// is vacant.
     #[inline]
     pub fn or_insert_with<F: FnOnce() -> V>(self, default: F) -> &'a mut V
     where
@@ -623,7 +652,10 @@ impl<'a, K, V, S> Entry<'a, K, V, S> {
         S: BuildHasher,
     {
         match self {
-            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Occupied(mut entry) => {
+                entry.to_back();
+                entry.into_mut()
+            },
             Entry::Vacant(entry) => entry.insert(default()),
         }
     }
@@ -702,10 +734,14 @@ impl<'a, K, V> OccupiedEntry<'a, K, V> {
         self.raw_entry.to_front()
     }
 
+    /// Replaces this entry's value with the provided value.
+    ///
+    /// Similarly to `LinkedHashMap::insert`, this moves the existing entry to the back of the
+    /// internal linked list.
     #[inline]
     pub fn insert(&mut self, value: V) -> V {
         self.raw_entry.to_back();
-        self.raw_entry.insert(value)
+        self.raw_entry.replace_value(value)
     }
 
     #[inline]
@@ -713,13 +749,27 @@ impl<'a, K, V> OccupiedEntry<'a, K, V> {
         self.raw_entry.remove()
     }
 
+    /// Similar to `OccupiedEntry::replace_entry`, but *does* move the entry to the back of the
+    /// internal linked list.
     #[inline]
+    pub fn insert_entry(mut self, value: V) -> (K, V) {
+        self.raw_entry.to_back();
+        self.replace_entry(value)
+    }
+
+    /// Replaces the entry's key with the key provided to `LinkedHashMap::entry`, and replaces the
+    /// entry's value with the given `value` parameter.
+    ///
+    /// Does *not* move the entry to the back of the internal linked list.
     pub fn replace_entry(mut self, value: V) -> (K, V) {
         let old_key = mem::replace(self.raw_entry.key_mut(), self.key);
         let old_value = mem::replace(self.raw_entry.get_mut(), value);
         (old_key, old_value)
     }
 
+    /// Replaces this entry's key with the key provided to `LinkedHashMap::entry`.
+    ///
+    /// Does *not* move the entry to the back of the internal linked list.
     #[inline]
     pub fn replace_key(mut self) -> K {
         mem::replace(self.raw_entry.key_mut(), self.key)
@@ -749,6 +799,8 @@ impl<'a, K, V, S> VacantEntry<'a, K, V, S> {
         self.key
     }
 
+    /// Insert's the key for this vacant entry paired with the given value as a new entry at the
+    /// *back* of the internal linked list.
     #[inline]
     pub fn insert(self, value: V) -> &'a mut V
     where
@@ -900,6 +952,8 @@ pub enum RawEntryMut<'a, K, V, S> {
 }
 
 impl<'a, K, V, S> RawEntryMut<'a, K, V, S> {
+    /// Similarly to `Entry::or_insert`, if this entry is occupied, it will move the existing entry
+    /// to the back of the internal linked list.
     #[inline]
     pub fn or_insert(self, default_key: K, default_val: V) -> (&'a mut K, &'a mut V)
     where
@@ -907,11 +961,16 @@ impl<'a, K, V, S> RawEntryMut<'a, K, V, S> {
         S: BuildHasher,
     {
         match self {
-            RawEntryMut::Occupied(entry) => entry.into_key_value(),
+            RawEntryMut::Occupied(mut entry) => {
+                entry.to_back();
+                entry.into_key_value()
+            },
             RawEntryMut::Vacant(entry) => entry.insert(default_key, default_val),
         }
     }
 
+    /// Similarly to `Entry::or_insert_with`, if this entry is occupied, it will move the existing
+    /// entry to the back of the internal linked list.
     #[inline]
     pub fn or_insert_with<F>(self, default: F) -> (&'a mut K, &'a mut V)
     where
@@ -920,7 +979,10 @@ impl<'a, K, V, S> RawEntryMut<'a, K, V, S> {
         S: BuildHasher,
     {
         match self {
-            RawEntryMut::Occupied(entry) => entry.into_key_value(),
+            RawEntryMut::Occupied(mut entry) => {
+                entry.to_back();
+                entry.into_key_value()
+            },
             RawEntryMut::Vacant(entry) => {
                 let (k, v) = default();
                 entry.insert(k, v)
@@ -1026,7 +1088,7 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
     }
 
     #[inline]
-    pub fn insert(&mut self, value: V) -> V {
+    pub fn replace_value(&mut self, value: V) -> V {
         unsafe {
             let mut node = *self.entry.key_mut();
             mem::replace(node.as_mut().value_mut(), value)
@@ -1034,7 +1096,7 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
     }
 
     #[inline]
-    pub fn insert_key(&mut self, key: K) -> K {
+    pub fn replace_key(&mut self, key: K) -> K {
         unsafe {
             let mut node = *self.entry.key_mut();
             mem::replace(node.as_mut().key_mut(), key)

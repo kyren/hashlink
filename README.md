@@ -3,9 +3,9 @@ This crate is a fork of
 top of [hashbrown](https://github.com/rust-lang/hashbrown) to implement more up
 to date versions of `LinkedHashMap` `LinkedHashSet`, and `LruCache`.
 
-The most important API change is that when a `LinkedHashMap` is used as a LRU
-cache, it allows you to do things like this to avoid repeated key hashing and
-lookups:
+One important API change is that when a `LinkedHashMap` is used as a LRU cache,
+it allows you to easily retrieve an entry and move it to the back OR produce a
+new entry at the back without needlessly repeating key hashing and lookups:
 
 ``` rust
 let mut lru_cache = LinkedHashMap::new();
@@ -23,6 +23,17 @@ let _cached_val = match lru_cache.raw_entry_mut().from_key(&key) {
         vacant.insert(key.clone(), 42).1
     }
 };
+```
+
+Or, a simpler way to do the same thing:
+
+``` rust
+let mut lru_cache = LinkedHashMap::new();
+let key = "key".to_owned();
+let _cached_val = lru_cache
+    .raw_entry_mut()
+    .from_key(&key)
+    .or_insert_with(|| (key.clone(), 42));
 ```
 
 This crate contains a decent amount of unsafe code from handling its internal

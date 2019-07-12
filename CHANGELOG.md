@@ -1,3 +1,9 @@
+## [0.3.0]
+- Add some *minimal* documentation for methods that change the internal ordering.
+- Decide on a pattern for methods that change the internal ordering: the word
+  "insert" means that it will move an existing entry to the back.
+- Some methods have been renamed to conform to the above system.
+
 ## [0.2.1]
 - Fix variance for LinkedHashMap (now covariant where appropriate)
 - Add Debug impls to many more associated types
