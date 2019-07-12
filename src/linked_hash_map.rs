@@ -15,7 +15,7 @@ use hashbrown::{hash_map, HashMap};
 /// A version of `HashMap` that has a user controllable order for its entries.
 ///
 /// It achieves this by keeping its entries in an internal linked list and using a `HashMap` to
-/// point at nodes in this linked list. 
+/// point at nodes in this linked list.
 ///
 /// The order of entries defaults to "insertion order", but the user can also modify the order of
 /// existing entries by manually moving them to the front or back.
@@ -638,7 +638,7 @@ impl<'a, K, V, S> Entry<'a, K, V, S> {
             Entry::Occupied(mut entry) => {
                 entry.to_back();
                 entry.into_mut()
-            },
+            }
             Entry::Vacant(entry) => entry.insert(default),
         }
     }
@@ -655,7 +655,7 @@ impl<'a, K, V, S> Entry<'a, K, V, S> {
             Entry::Occupied(mut entry) => {
                 entry.to_back();
                 entry.into_mut()
-            },
+            }
             Entry::Vacant(entry) => entry.insert(default()),
         }
     }
@@ -964,7 +964,7 @@ impl<'a, K, V, S> RawEntryMut<'a, K, V, S> {
             RawEntryMut::Occupied(mut entry) => {
                 entry.to_back();
                 entry.into_key_value()
-            },
+            }
             RawEntryMut::Vacant(entry) => entry.insert(default_key, default_val),
         }
     }
@@ -982,7 +982,7 @@ impl<'a, K, V, S> RawEntryMut<'a, K, V, S> {
             RawEntryMut::Occupied(mut entry) => {
                 entry.to_back();
                 entry.into_key_value()
-            },
+            }
             RawEntryMut::Vacant(entry) => {
                 let (k, v) = default();
                 entry.insert(k, v)
