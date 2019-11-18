@@ -30,7 +30,7 @@ jobs:
           command: cargo test --all
       - run:
           name: Run miri tests
-          command: cargo miri test --all
+          command: rustup +nightly cargo miri test --all
       - save_cache:
           paths:
             - /usr/local/cargo/registry
