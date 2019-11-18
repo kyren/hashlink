@@ -30,7 +30,7 @@ jobs:
       - run:
           name: Run miri tests
           command: |
-              rustup component add --toolchain nightly miri-preview
+              rustup toolchain install --force nightly -c miri-preview
               rustup run nightly cargo miri test --all
       - save_cache:
           paths:
