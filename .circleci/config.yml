@@ -31,7 +31,7 @@ jobs:
           name: Run miri tests
           command: |
               rustup toolchain install --force nightly -c miri-preview
-              rustup run nightly cargo miri test --all
+              rustup run nightly cargo miri test
       - save_cache:
           paths:
             - /usr/local/cargo/registry

@@ -1,3 +1,9 @@
+# hashlink -- HashMap-like containers that hold their key-value pairs in a user controllable order
+
+[![Build Status](https://img.shields.io/circleci/project/github/kyren/hashlink.svg)](https://circleci.com/gh/kyren/hashlink)
+[![Latest Version](https://img.shields.io/crates/v/hashlink.svg)](https://crates.io/crates/hashlink)
+[![API Documentation](https://docs.rs/hashlink/badge.svg)](https://docs.rs/hashlink)
+
 This crate is a fork of 
 [linked-hash-map](https://github.com/contain-rs/linked-hash-map) that builds on
 top of [hashbrown](https://github.com/rust-lang/hashbrown) to implement more up
