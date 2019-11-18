@@ -289,7 +289,7 @@ fn test_iter_mut() {
     {
         let mut iter = map.iter_mut();
         let entry = iter.next().unwrap();
-        assert_eq!(&"a", entry.0);
+        assert_eq!("a", *entry.0);
         *entry.1 = 17;
 
         assert_eq!(format!("{:?}", iter), "[(\"c\", 30), (\"b\", 20)]");
@@ -297,11 +297,11 @@ fn test_iter_mut() {
         // reverse iterator
         let mut iter = iter.rev();
         let entry = iter.next().unwrap();
-        assert_eq!(&"b", entry.0);
+        assert_eq!("b", *entry.0);
         *entry.1 = 23;
 
         let entry = iter.next().unwrap();
-        assert_eq!(&"c", entry.0);
+        assert_eq!("c", *entry.0);
         assert_eq!(None, iter.next());
         assert_eq!(None, iter.next());
     }

@@ -19,6 +19,7 @@ jobs:
           name: Check Formatting
           command: |
               rustup component add rustfmt
+              rustup component add miri-preview
               rustfmt --version
               cargo fmt --all -- --check --color=auto
       - run:
@@ -27,6 +28,9 @@ jobs:
       - run:
           name: Run all tests
           command: cargo test --all
+      - run:
+          name: Run miri tests
+          command: cargo miri test --all
       - save_cache:
           paths:
             - /usr/local/cargo/registry

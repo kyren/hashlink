@@ -38,8 +38,8 @@ let _cached_val = lru_cache
 
 This crate contains a decent amount of unsafe code from handling its internal
 linked list, and the unsafe code has diverged quite a lot from the original
-`linked-hash-map` implementation.  As such, it should probably receive a lot
-more review and testing before you place any kind of serious trust in it.
+`linked-hash-map` implementation.  It currently passes tests under miri, but it
+should probably still receive more review and testing.
 
 ## Credit
 

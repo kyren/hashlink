@@ -1,3 +1,6 @@
+## [0.3.1]
+- Passes miri
+
 ## [0.3.0]
 - Add some *minimal* documentation for methods that change the internal ordering.
 - Decide on a pattern for methods that change the internal ordering: the word

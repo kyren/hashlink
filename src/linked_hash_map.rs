@@ -181,7 +181,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
             self.map.clear();
 
             Drain {
-                free: Some((&self.free).into()),
+                free: (&mut self.free).into(),
                 head,
                 tail,
                 remaining: len,
@@ -214,7 +214,8 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
         }
         unsafe {
             let front = (*self.values.as_ptr()).links.value.next.as_ptr();
-            Some(((*front).key_ref(), (*front).value_ref()))
+            let (key, value) = (*front).entry_ref();
+            Some((key, value))
         }
     }
 
@@ -224,8 +225,9 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
             return None;
         }
         unsafe {
-            let back = (*self.values.as_ptr()).links.value.prev.as_ptr();
-            Some(((*back).key_ref(), (*back).value_ref()))
+            let back = &*(*self.values.as_ptr()).links.value.prev.as_ptr();
+            let (key, value) = (*back).entry_ref();
+            Some((key, value))
         }
     }
 
@@ -262,8 +264,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
                     let end_free = self.cur_free;
                     while self.cur_free != *self.free {
                         let cur_free = self.cur_free.as_ptr();
-                        (*cur_free).take_key();
-                        (*cur_free).take_value();
+                        (*cur_free).take_entry();
                         self.cur_free = (*cur_free).links.free.next;
                     }
                     *self.free = end_free;
@@ -278,7 +279,8 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
         };
 
         self.map.retain(|&node, _| unsafe {
-            if f((*node.as_ptr()).key_ref(), (*node.as_ptr()).value_mut()) {
+            let (k, v) = (*node.as_ptr()).entry_mut();
+            if f(k, v) {
                 true
             } else {
                 drop_filtered_values.drop_later(node);
@@ -851,7 +853,8 @@ where
                 .from_hash(hash, move |k| is_match((*k).as_ref().key_ref()))?
                 .0;
 
-            Some(((*node.as_ptr()).key_ref(), (*node.as_ptr()).value_ref()))
+            let (key, value) = (*node.as_ptr()).entry_ref();
+            Some((key, value))
         }
     }
 }
@@ -1049,7 +1052,8 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
     pub fn get_key_value(&self) -> (&K, &V) {
         unsafe {
             let node = *self.entry.key();
-            ((*node.as_ptr()).key_ref(), (*node.as_ptr()).value_ref())
+            let (key, value) = (*node.as_ptr()).entry_ref();
+            (key, value)
         }
     }
 
@@ -1057,7 +1061,8 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
     pub fn get_key_value_mut(&mut self) -> (&mut K, &mut V) {
         unsafe {
             let node = *self.entry.key_mut();
-            ((*node.as_ptr()).key_mut(), (*node.as_ptr()).value_mut())
+            let (key, value) = (*node.as_ptr()).entry_mut();
+            (key, value)
         }
     }
 
@@ -1065,7 +1070,8 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
     pub fn into_key_value(self) -> (&'a mut K, &'a mut V) {
         unsafe {
             let node = *self.entry.into_key();
-            ((*node.as_ptr()).key_mut(), (*node.as_ptr()).value_mut())
+            let (key, value) = (*node.as_ptr()).entry_mut();
+            (key, value)
         }
     }
 
@@ -1091,7 +1097,7 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
     pub fn replace_value(&mut self, value: V) -> V {
         unsafe {
             let mut node = *self.entry.key_mut();
-            mem::replace(node.as_mut().value_mut(), value)
+            mem::replace(&mut node.as_mut().entry_mut().1, value)
         }
     }
 
@@ -1099,7 +1105,7 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
     pub fn replace_key(&mut self, key: K) -> K {
         unsafe {
             let mut node = *self.entry.key_mut();
-            mem::replace(node.as_mut().key_mut(), key)
+            mem::replace(&mut node.as_mut().entry_mut().0, key)
         }
     }
 
@@ -1157,8 +1163,7 @@ impl<'a, K, V, S> RawVacantEntryMut<'a, K, V, S> {
         unsafe {
             ensure_guard_node(self.values);
             let mut new_node = allocate_node(self.free);
-            new_node.as_mut().put_key(key);
-            new_node.as_mut().put_value(value);
+            new_node.as_mut().put_entry((key, value));
             attach_before(new_node, NonNull::new_unchecked(self.values.as_ptr()));
 
             let node = *self
@@ -1166,7 +1171,8 @@ impl<'a, K, V, S> RawVacantEntryMut<'a, K, V, S> {
                 .insert_with_hasher(hash, new_node, (), move |k| hasher((*k).as_ref().key_ref()))
                 .0;
 
-            ((*node.as_ptr()).key_mut(), (*node.as_ptr()).value_mut())
+            let (key, value) = (*node.as_ptr()).entry_mut();
+            (key, value)
         }
     }
 }
@@ -1264,7 +1270,7 @@ pub struct IntoIter<K, V> {
 }
 
 pub struct Drain<'a, K, V> {
-    free: Option<NonNull<Option<NonNull<Node<K, V>>>>>,
+    free: NonNull<Option<NonNull<Node<K, V>>>>,
     head: Option<NonNull<Node<K, V>>>,
     tail: Option<NonNull<Node<K, V>>>,
     remaining: usize,
@@ -1421,9 +1427,9 @@ impl<'a, K, V> Iterator for Iter<'a, K, V> {
         } else {
             self.remaining -= 1;
             unsafe {
-                let r = Some(((*self.head).key_ref(), (*self.head).value_ref()));
+                let (key, value) = (*self.head).entry_ref();
                 self.head = (*self.head).links.value.next.as_ptr();
-                r
+                Some((key, value))
             }
         }
     }
@@ -1445,9 +1451,9 @@ impl<'a, K, V> Iterator for IterMut<'a, K, V> {
             self.remaining -= 1;
             unsafe {
                 let head = self.head.as_ptr();
-                let r = Some(((*head).key_ref(), (*head).value_mut()));
+                let (key, value) = (*head).entry_mut();
                 self.head = Some((*head).links.value.next);
-                r
+                Some((key, value))
             }
         }
     }
@@ -1471,7 +1477,7 @@ impl<K, V> Iterator for IntoIter<K, V> {
             let head = self.head.as_ptr();
             self.head = Some((*head).links.value.next);
             let mut e = Box::from_raw(head);
-            Some((e.take_key(), e.take_value()))
+            Some(e.take_entry())
         }
     }
 
@@ -1493,10 +1499,9 @@ impl<'a, K, V> Iterator for Drain<'a, K, V> {
         unsafe {
             let mut head = NonNull::new_unchecked(self.head.as_ptr());
             self.head = Some(head.as_ref().links.value.next);
-            let key = head.as_mut().take_key();
-            let value = head.as_mut().take_value();
-            push_free(&mut *self.free.as_ptr(), head);
-            Some((key, value))
+            let entry = head.as_mut().take_entry();
+            push_free(self.free.as_mut(), head);
+            Some(entry)
         }
     }
 
@@ -1516,7 +1521,8 @@ impl<'a, K, V> DoubleEndedIterator for Iter<'a, K, V> {
             unsafe {
                 let tail = self.tail;
                 self.tail = (*tail).links.value.prev.as_ptr();
-                Some(((*tail).key_ref(), (*tail).value_ref()))
+                let (key, value) = (*tail).entry_ref();
+                Some((key, value))
             }
         }
     }
@@ -1532,7 +1538,8 @@ impl<'a, K, V> DoubleEndedIterator for IterMut<'a, K, V> {
             unsafe {
                 let tail = self.tail.as_ptr();
                 self.tail = Some((*tail).links.value.prev);
-                Some(((*tail).key_ref(), (*tail).value_mut()))
+                let (key, value) = (*tail).entry_mut();
+                Some((key, value))
             }
         }
     }
@@ -1548,7 +1555,7 @@ impl<K, V> DoubleEndedIterator for IntoIter<K, V> {
         unsafe {
             let mut e = *Box::from_raw(self.tail.as_ptr());
             self.tail = Some(e.links.value.prev);
-            Some((e.take_key(), e.take_value()))
+            Some(e.take_entry())
         }
     }
 }
@@ -1563,10 +1570,9 @@ impl<'a, K, V> DoubleEndedIterator for Drain<'a, K, V> {
         unsafe {
             let mut tail = NonNull::new_unchecked(self.tail.as_ptr());
             self.tail = Some(tail.as_ref().links.value.prev);
-            let key = tail.as_mut().take_key();
-            let value = tail.as_mut().take_value();
+            let entry = tail.as_mut().take_entry();
             push_free(&mut *self.free.as_ptr(), tail);
-            Some((key, value))
+            Some(entry)
         }
     }
 }
@@ -1584,8 +1590,7 @@ impl<K, V> Drop for IntoIter<K, V> {
             unsafe {
                 let tail = self.tail.as_ptr();
                 self.tail = Some((*tail).links.value.prev);
-                (*tail).take_key();
-                (*tail).take_value();
+                (*tail).take_entry();
                 Box::from_raw(tail);
             }
         }
@@ -1599,8 +1604,7 @@ impl<'a, K, V> Drop for Drain<'a, K, V> {
             unsafe {
                 let mut tail = NonNull::new_unchecked(self.tail.as_ptr());
                 self.tail = Some(tail.as_ref().links.value.prev);
-                tail.as_mut().take_key();
-                tail.as_mut().take_value();
+                tail.as_mut().take_entry();
                 push_free(&mut *self.free.as_ptr(), tail);
             }
         }
@@ -1863,55 +1867,38 @@ union Links<K, V> {
 }
 
 struct Node<K, V> {
-    key: MaybeUninit<K>,
-    value: MaybeUninit<V>,
+    entry: MaybeUninit<(K, V)>,
     links: Links<K, V>,
 }
 
 impl<K, V> Node<K, V> {
     #[inline]
-    unsafe fn put_key(&mut self, key: K) {
-        self.key.as_mut_ptr().write(key)
+    unsafe fn put_entry(&mut self, entry: (K, V)) {
+        self.entry.as_mut_ptr().write(entry)
     }
 
     #[inline]
-    unsafe fn put_value(&mut self, value: V) {
-        self.value.as_mut_ptr().write(value)
+    unsafe fn entry_ref(&self) -> &(K, V) {
+        &*self.entry.as_ptr()
     }
 
     #[inline]
     unsafe fn key_ref(&self) -> &K {
-        &*self.key.as_ptr()
+        &(*self.entry.as_ptr()).0
     }
 
     #[inline]
-    unsafe fn value_ref(&self) -> &V {
-        &*self.value.as_ptr()
+    unsafe fn entry_mut(&mut self) -> &mut (K, V) {
+        &mut *self.entry.as_mut_ptr()
     }
 
     #[inline]
-    unsafe fn key_mut(&mut self) -> &mut K {
-        &mut *self.key.as_mut_ptr()
-    }
-
-    #[inline]
-    unsafe fn value_mut(&mut self) -> &mut V {
-        &mut *self.value.as_mut_ptr()
-    }
-
-    #[inline]
-    unsafe fn take_key(&mut self) -> K {
-        self.key.as_ptr().read()
-    }
-
-    #[inline]
-    unsafe fn take_value(&mut self) -> V {
-        self.value.as_ptr().read()
+    unsafe fn take_entry(&mut self) -> (K, V) {
+        self.entry.as_ptr().read()
     }
 }
 
 trait OptNonNullExt<T> {
-    #[inline]
     fn as_ptr(self) -> *mut T;
 }
 
@@ -1930,8 +1917,7 @@ impl<T> OptNonNullExt<T> for Option<NonNull<T>> {
 unsafe fn ensure_guard_node<K, V>(head: &mut Option<NonNull<Node<K, V>>>) {
     if head.is_none() {
         let mut p = NonNull::new_unchecked(Box::into_raw(Box::new(Node {
-            key: MaybeUninit::uninit(),
-            value: MaybeUninit::uninit(),
+            entry: MaybeUninit::uninit(),
             links: Links {
                 value: ValueLinks {
                     next: NonNull::dangling(),
@@ -1995,8 +1981,7 @@ unsafe fn allocate_node<K, V>(free_list: &mut Option<NonNull<Node<K, V>>>) -> No
         free
     } else {
         NonNull::new_unchecked(Box::into_raw(Box::new(Node {
-            key: MaybeUninit::uninit(),
-            value: MaybeUninit::uninit(),
+            entry: MaybeUninit::uninit(),
             links: Links {
                 value: ValueLinks {
                     next: NonNull::dangling(),
@@ -2013,8 +1998,7 @@ unsafe fn drop_value_nodes<K, V>(guard: NonNull<Node<K, V>>) {
     let mut cur = guard.as_ref().links.value.prev;
     while cur != guard {
         let prev = cur.as_ref().links.value.prev;
-        cur.as_mut().take_key();
-        cur.as_mut().take_value();
+        cur.as_mut().take_entry();
         Box::from_raw(cur.as_ptr());
         cur = prev;
     }
@@ -2038,9 +2022,7 @@ unsafe fn remove_node<K, V>(
 ) -> (K, V) {
     detach_node(node);
     push_free(free_list, node);
-    let key = node.as_mut().take_key();
-    let value = node.as_mut().take_value();
-    (key, value)
+    node.as_mut().take_entry()
 }
 
 #[inline]
