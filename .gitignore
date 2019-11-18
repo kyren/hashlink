@@ -2,6 +2,6 @@
 **/*.rs.bk
 Cargo.lock
 .DS_Store
-.direnv
 .envrc
+shell.nix
 .dir-locals.el
