@@ -32,6 +32,14 @@ jobs:
           command: |
               rustup toolchain install --force nightly -c miri-preview
               rustup run nightly cargo miri test
+      - run:
+          name: Run sanitizers
+          command: |
+              rustup toolchain install --force nightly
+              RUSTFLAGS="-Z sanitizer=address" cargo +nightly test
+              RUSTFLAGS="-Z sanitizer=leak" cargo +nightly test
+              RUSTFLAGS="-Z sanitizer=memory" cargo +nightly test
+              RUSTFLAGS="-Z sanitizer=thread" cargo +nightly test
       - save_cache:
           paths:
             - /usr/local/cargo/registry
