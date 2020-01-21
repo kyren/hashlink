@@ -28,18 +28,19 @@ jobs:
           name: Run all tests
           command: cargo test --all
       - run:
-          name: Run miri tests
+          name: Run all tests under miri
           command: |
               rustup toolchain install --force nightly -c miri-preview
               rustup run nightly cargo miri test
       - run:
-          name: Run sanitizers
+          name: Run all tests under sanitizers
           command: |
               rustup toolchain install --force nightly
               RUSTFLAGS="-Z sanitizer=address" cargo +nightly test --target x86_64-unknown-linux-gnu
               RUSTFLAGS="-Z sanitizer=leak" cargo +nightly test --target x86_64-unknown-linux-gnu
-              RUSTFLAGS="-Z sanitizer=memory" cargo +nightly test --target x86_64-unknown-linux-gnu
               RUSTFLAGS="-Z sanitizer=thread" cargo +nightly test --target x86_64-unknown-linux-gnu
+              # Appears to be blocked on https://github.com/rust-lang/rust/issues/39610
+              # RUSTFLAGS="-Z sanitizer=memory" cargo +nightly test --target x86_64-unknown-linux-gnu
       - save_cache:
           paths:
             - /usr/local/cargo/registry
