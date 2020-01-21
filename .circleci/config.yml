@@ -36,10 +36,10 @@ jobs:
           name: Run sanitizers
           command: |
               rustup toolchain install --force nightly
-              RUSTFLAGS="-Z sanitizer=address" cargo +nightly test
-              RUSTFLAGS="-Z sanitizer=leak" cargo +nightly test
-              RUSTFLAGS="-Z sanitizer=memory" cargo +nightly test
-              RUSTFLAGS="-Z sanitizer=thread" cargo +nightly test
+              RUSTFLAGS="-Z sanitizer=address" cargo +nightly test --target x86_64-unknown-linux-gnu
+              RUSTFLAGS="-Z sanitizer=leak" cargo +nightly test --target x86_64-unknown-linux-gnu
+              RUSTFLAGS="-Z sanitizer=memory" cargo +nightly test --target x86_64-unknown-linux-gnu
+              RUSTFLAGS="-Z sanitizer=thread" cargo +nightly test --target x86_64-unknown-linux-gnu
       - save_cache:
           paths:
             - /usr/local/cargo/registry
