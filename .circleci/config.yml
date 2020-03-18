@@ -7,8 +7,19 @@ jobs:
     steps:
       - checkout
       - run:
+          name: Setup Rust
+          command: |
+              rustup component add rustfmt
+              rustup toolchain uninstall nightly
+              rustup toolchain install nightly -c miri rust-src
+      - run:
           name: Version information
-          command: rustc --version; cargo --version; rustup --version
+          command: |
+              rustc --version
+              cargo --version
+              rustc +nightly --version
+              cargo +nightly --version
+              rustup --version
       - run:
           name: Calculate dependencies
           command: cargo generate-lockfile
@@ -18,7 +29,6 @@ jobs:
       - run:
           name: Check Formatting
           command: |
-              rustup component add rustfmt
               rustfmt --version
               cargo fmt --all -- --check --color=auto
       - run:
@@ -30,15 +40,13 @@ jobs:
       - run:
           name: Run all tests under miri
           command: |
-              rustup toolchain install nightly --allow-downgrade -c miri
-              rustup run nightly cargo miri test
+              cargo +nightly miri test
       - run:
           name: Run all tests under sanitizers
           command: |
-              rustup toolchain install nightly --allow-downgrade -c rust-src
-              RUSTFLAGS="-Z sanitizer=address" rustup run nightly cargo -Z build-std test --target x86_64-unknown-linux-gnu
-              RUSTFLAGS="-Z sanitizer=leak" rustup run nightly cargo test -Z build-std --target x86_64-unknown-linux-gnu
-              RUSTFLAGS="-Z sanitizer=memory" rustup run nightly cargo test -Z build-std --target x86_64-unknown-linux-gnu
+              RUSTFLAGS="-Z sanitizer=address" cargo +nightly -Z build-std test --target x86_64-unknown-linux-gnu
+              RUSTFLAGS="-Z sanitizer=leak" cargo +nightly test -Z build-std --target x86_64-unknown-linux-gnu
+              RUSTFLAGS="-Z sanitizer=memory" cargo +nightly test -Z build-std --target x86_64-unknown-linux-gnu
       - save_cache:
           paths:
             - /usr/local/cargo/registry
