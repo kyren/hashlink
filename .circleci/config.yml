@@ -30,7 +30,7 @@ jobs:
       - run:
           name: Run all tests under miri
           command: |
-              rustup toolchain install --force nightly -c miri-preview
+              rustup toolchain install --force nightly -c miri
               rustup run nightly cargo miri test
       - run:
           name: Run all tests under sanitizers
