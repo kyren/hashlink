@@ -30,15 +30,15 @@ jobs:
       - run:
           name: Run all tests under miri
           command: |
-              rustup toolchain install nightly -c miri
+              rustup toolchain install nightly --allow-downgrade -c miri
               rustup run nightly cargo miri test
       - run:
           name: Run all tests under sanitizers
           command: |
-              rustup toolchain install nightly -c rust-src
-              RUSTFLAGS="-Z sanitizer=address" cargo +nightly -Z build-std test --target x86_64-unknown-linux-gnu
-              RUSTFLAGS="-Z sanitizer=leak" cargo +nightly test -Z build-std --target x86_64-unknown-linux-gnu
-              RUSTFLAGS="-Z sanitizer=memory" cargo +nightly test -Z build-std --target x86_64-unknown-linux-gnu
+              rustup toolchain install nightly --allow-downgrade -c rust-src
+              RUSTFLAGS="-Z sanitizer=address" rustup run nightly cargo -Z build-std test --target x86_64-unknown-linux-gnu
+              RUSTFLAGS="-Z sanitizer=leak" rustup run nightly cargo test -Z build-std --target x86_64-unknown-linux-gnu
+              RUSTFLAGS="-Z sanitizer=memory" rustup run nightly cargo test -Z build-std --target x86_64-unknown-linux-gnu
       - save_cache:
           paths:
             - /usr/local/cargo/registry
