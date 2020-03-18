@@ -1,3 +1,6 @@
+## [0.5.0]
+- API incompatible change: depend on hashbrown 0.7
+
 ## [0.4.0]
 - API incompatible change: depend on hashbrown 0.6
 - Passes miri
