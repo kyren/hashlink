@@ -38,8 +38,7 @@ jobs:
               rustup toolchain install nightly
               RUSTFLAGS="-Z sanitizer=address" cargo +nightly test --target x86_64-unknown-linux-gnu
               RUSTFLAGS="-Z sanitizer=leak" cargo +nightly test --target x86_64-unknown-linux-gnu
-              # Appears to be blocked on https://github.com/rust-lang/rust/issues/39610
-              # RUSTFLAGS="-Z sanitizer=memory" cargo +nightly test --target x86_64-unknown-linux-gnu
+              RUSTFLAGS="-Z sanitizer=memory" cargo +nightly test --target x86_64-unknown-linux-gnu
       - save_cache:
           paths:
             - /usr/local/cargo/registry
