@@ -9,17 +9,16 @@ jobs:
       - run:
           name: Setup Rust
           command: |
-              rustup component add rustfmt
-              rustup toolchain uninstall nightly
-              rustup toolchain install nightly -c miri rust-src
+            rustup toolchain uninstall nightly
+            rustup toolchain install nightly -c miri rust-src rustfmt
       - run:
           name: Version information
           command: |
-              rustc --version
-              cargo --version
-              rustc +nightly --version
-              cargo +nightly --version
-              rustup --version
+            rustc --version
+            cargo --version
+            rustc +nightly --version
+            cargo +nightly --version
+            rustup --version
       - run:
           name: Calculate dependencies
           command: cargo generate-lockfile
@@ -29,8 +28,8 @@ jobs:
       - run:
           name: Check Formatting
           command: |
-              rustfmt --version
-              cargo fmt --all -- --check --color=auto
+            rustfmt --version
+            cargo fmt --all -- --check --color=auto
       - run:
           name: Build all targets
           command: cargo build --all --all-targets
@@ -40,13 +39,13 @@ jobs:
       - run:
           name: Run all tests under miri
           command: |
-              cargo +nightly miri test
+            cargo +nightly miri test
       - run:
           name: Run all tests under sanitizers
           command: |
-              RUSTFLAGS="-Z sanitizer=address" cargo +nightly -Z build-std test --target x86_64-unknown-linux-gnu
-              RUSTFLAGS="-Z sanitizer=leak" cargo +nightly test -Z build-std --target x86_64-unknown-linux-gnu
-              RUSTFLAGS="-Z sanitizer=memory" cargo +nightly test -Z build-std --target x86_64-unknown-linux-gnu
+            RUSTFLAGS="-Z sanitizer=address" cargo +nightly -Z build-std test --target x86_64-unknown-linux-gnu
+            RUSTFLAGS="-Z sanitizer=leak" cargo +nightly test -Z build-std --target x86_64-unknown-linux-gnu
+            RUSTFLAGS="-Z sanitizer=memory" cargo +nightly test -Z build-std --target x86_64-unknown-linux-gnu
       - save_cache:
           paths:
             - /usr/local/cargo/registry
