@@ -107,6 +107,15 @@ where
     }
 
     #[inline]
+    pub fn remove_entry<Q>(&mut self, k: &Q) -> Option<(K, V)>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
+        self.map.remove_entry(k)
+    }
+
+    #[inline]
     pub fn capacity(&self) -> usize {
         self.max_size
     }
