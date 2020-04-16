@@ -389,6 +389,18 @@ where
     }
 
     #[inline]
+    pub fn remove_entry<Q>(&mut self, k: &Q) -> Option<(K, V)>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
+        match self.raw_entry_mut().from_key(&k) {
+            RawEntryMut::Occupied(occupied) => Some(occupied.remove_entry()),
+            RawEntryMut::Vacant(_) => None,
+        }
+    }
+
+    #[inline]
     pub fn pop_front(&mut self) -> Option<(K, V)> {
         if self.is_empty() {
             return None;
