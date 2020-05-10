@@ -1,6 +1,7 @@
 use std::{
     borrow::Borrow,
     hash::{BuildHasher, Hash},
+    usize,
 };
 
 use hashbrown::hash_map;
@@ -25,6 +26,14 @@ impl<K: Eq + Hash, V> LruCache<K, V> {
             max_size: capacity,
         }
     }
+
+    /// Create a new unbounded `LruCache` that does not automatically evict entries.
+    ///
+    /// A simple convenience method that is equivalent to `LruCache::new(usize::MAX)`
+    #[inline]
+    pub fn unbounded() -> Self {
+        LruCache::new(usize::MAX)
+    }
 }
 
 impl<K: Eq + Hash, V, S> LruCache<K, V, S>
@@ -48,6 +57,9 @@ where
         self.get_mut(key).is_some()
     }
 
+    /// Insert a new value into the `LruCache`.
+    ///
+    /// If necessary, will remove the value at the front of the LRU list to make room.
     #[inline]
     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
         let old_val = self.map.insert(k, v);
@@ -57,6 +69,41 @@ where
         old_val
     }
 
+    /// Get the value for the given key, *without* marking the value as recently used and moving it
+    /// to the back of the LRU list.
+    #[inline]
+    pub fn peek<Q>(&self, k: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
+        self.map.get(k)
+    }
+
+    /// Get the value for the given key mutably, *without* marking the value as recently used and
+    /// moving it to the back of the LRU list.
+    #[inline]
+    pub fn peek_mut<Q>(&mut self, k: &Q) -> Option<&mut V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
+        self.map.get_mut(k)
+    }
+
+    /// Retrieve the given key, marking it as recently used and moving it to the back of the LRU
+    /// list.
+    #[inline]
+    pub fn get<Q>(&mut self, k: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
+        self.get_mut(k).map(|v| &*v)
+    }
+
+    /// Retrieve the given key, marking it as recently used and moving it to the back of the LRU
+    /// list.
     #[inline]
     pub fn get_mut<Q>(&mut self, k: &Q) -> Option<&mut V>
     where

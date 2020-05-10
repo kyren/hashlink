@@ -119,3 +119,22 @@ fn test_iter() {
         [(&5, &mut 50), (&4, &mut 40), (&3, &mut 30)]
     );
 }
+
+#[test]
+fn test_peek() {
+    let mut cache = LruCache::unbounded();
+    cache.insert(1, 10);
+    cache.insert(2, 20);
+    cache.insert(3, 30);
+    cache.insert(4, 40);
+    cache.insert(5, 50);
+    cache.insert(6, 60);
+
+    assert_eq!(cache.remove_lru(), Some((1, 10)));
+    assert_eq!(cache.peek(&2), Some(&20));
+    assert_eq!(cache.remove_lru(), Some((2, 20)));
+    assert_eq!(cache.peek_mut(&3), Some(&mut 30));
+    assert_eq!(cache.remove_lru(), Some((3, 30)));
+    assert_eq!(cache.get(&4), Some(&40));
+    assert_eq!(cache.remove_lru(), Some((5, 50)));
+}
