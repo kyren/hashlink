@@ -1,3 +1,10 @@
+## [0.5.1]
+- Add `LinkedHashMap::remove_entry` and `LruCache::remove_entry`
+- Add `LruCache::new_unbounded` constructor that sets capacity to usize::MAX
+- Add `LruCache::get` method to go with `LruCache::get_mut`
+- Add `LruCache::peek` and `LruCache::peek_mut` to access the cache without
+  moving the entry in the LRU list
+
 ## [0.5.0]
 - API incompatible change: depend on hashbrown 0.7
 
