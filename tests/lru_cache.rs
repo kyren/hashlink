@@ -122,7 +122,7 @@ fn test_iter() {
 
 #[test]
 fn test_peek() {
-    let mut cache = LruCache::unbounded();
+    let mut cache = LruCache::new_unbounded();
     cache.insert(1, 10);
     cache.insert(2, 20);
     cache.insert(3, 30);

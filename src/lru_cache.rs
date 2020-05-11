@@ -31,7 +31,7 @@ impl<K: Eq + Hash, V> LruCache<K, V> {
     ///
     /// A simple convenience method that is equivalent to `LruCache::new(usize::MAX)`
     #[inline]
-    pub fn unbounded() -> Self {
+    pub fn new_unbounded() -> Self {
         LruCache::new(usize::MAX)
     }
 }
