@@ -138,3 +138,29 @@ fn test_peek() {
     assert_eq!(cache.get(&4), Some(&40));
     assert_eq!(cache.remove_lru(), Some((5, 50)));
 }
+
+#[test]
+fn test_entry() {
+    let mut cache = LruCache::new(4);
+
+    cache.insert(1, 10);
+    cache.insert(2, 20);
+    cache.insert(3, 30);
+    cache.insert(4, 40);
+    cache.insert(5, 50);
+    cache.insert(6, 60);
+
+    assert_eq!(cache.len(), 4);
+
+    cache.entry(7).or_insert(70);
+    cache.entry(8).or_insert(80);
+    cache.entry(9).or_insert(90);
+
+    assert!(cache.len() <= 5);
+
+    cache.raw_entry_mut().from_key(&10).or_insert(10, 100);
+    cache.raw_entry_mut().from_key(&11).or_insert(11, 110);
+    cache.raw_entry_mut().from_key(&12).or_insert(12, 120);
+
+    assert!(cache.len() <= 5);
+}

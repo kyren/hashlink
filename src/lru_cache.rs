@@ -121,6 +121,10 @@ where
 
     /// If the returned entry is vacant, it will always have room to insert a single value.  By
     /// using the entry API, you can exceed the configured capacity by 1.
+    ///
+    /// The returned entry is not automatically moved to the back of the LRU list.  By calling
+    /// `Entry::to_back` / `Entry::to_front` you can manually control the position of this entry in
+    /// the LRU list.
     #[inline]
     pub fn entry(&mut self, key: K) -> Entry<'_, K, V, S> {
         if self.len() > self.capacity() {
@@ -129,13 +133,20 @@ where
         self.map.entry(key)
     }
 
+    /// The constructed raw entry is never automatically moved to the back of the LRU list.  By
+    /// calling `Entry::to_back` / `Entry::to_front` you can manually control the position of this
+    /// entry in the LRU list.
     #[inline]
     pub fn raw_entry(&self) -> RawEntryBuilder<'_, K, V, S> {
         self.map.raw_entry()
     }
 
-    /// If the returned entry is vacant, it will always have room to insert a single value.  By
-    /// using the entry API, you can exceed the configured capacity by 1.
+    /// If the constructed raw entry is vacant, it will always have room to insert a single value.
+    /// By using the raw entry API, you can exceed the configured capacity by 1.
+    ///
+    /// The constructed raw entry is never automatically moved to the back of the LRU list.  By
+    /// calling `Entry::to_back` / `Entry::to_front` you can manually control the position of this
+    /// entry in the LRU list.
     #[inline]
     pub fn raw_entry_mut(&mut self) -> RawEntryBuilderMut<'_, K, V, S> {
         if self.len() > self.capacity() {
@@ -167,6 +178,10 @@ where
         self.max_size
     }
 
+    /// Set the new cache capacity for the `LruCache`.
+    ///
+    /// If there are more entries in the `LruCache` than the new capacity will allow, they are
+    /// removed.
     #[inline]
     pub fn set_capacity(&mut self, capacity: usize) {
         for _ in capacity..self.len() {
@@ -175,6 +190,9 @@ where
         self.max_size = capacity;
     }
 
+    /// Remove the least recently used entry and return it.
+    ///
+    /// If the `LruCache` is empty this will return None.
     #[inline]
     pub fn remove_lru(&mut self) -> Option<(K, V)> {
         self.map.pop_front()
