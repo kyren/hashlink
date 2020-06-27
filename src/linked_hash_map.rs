@@ -12,6 +12,8 @@ use std::{
 
 use hashbrown::{hash_map, HashMap};
 
+pub type TryReserveError = hashbrown::TryReserveError;
+
 /// A version of `HashMap` that has a user controllable order for its entries.
 ///
 /// It achieves this by keeping its entries in an internal linked list and using a `HashMap` to
@@ -90,7 +92,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
     }
 
     #[inline]
-    pub fn try_reserve(&mut self, additional: usize) -> Result<(), hashbrown::CollectionAllocErr> {
+    pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
         self.map.try_reserve(additional)
     }
 

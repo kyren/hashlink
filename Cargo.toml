@@ -1,6 +1,6 @@
 [package]
 name = "hashlink"
-version = "0.5.2-alpha.0"
+version = "0.6.0-alpha.0"
 authors = ["kyren <kerriganw@gmail.com>"]
 edition = "2018"
 description = "HashMap-like containers that hold their key-value pairs in a user controllable order"
@@ -14,4 +14,4 @@ license = "MIT OR Apache-2.0"
 circle-ci = { repository = "kyren/hashlink", branch = "master" }
 
 [dependencies]
-hashbrown = "0.7.0"
+hashbrown = "0.8.0"

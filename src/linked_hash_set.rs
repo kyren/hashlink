@@ -8,7 +8,7 @@ use std::{
 
 use hashbrown::hash_map::DefaultHashBuilder;
 
-use crate::linked_hash_map::{self, LinkedHashMap};
+use crate::linked_hash_map::{self, LinkedHashMap, TryReserveError};
 
 pub struct LinkedHashSet<T, S = DefaultHashBuilder> {
     map: LinkedHashMap<T, (), S>,
@@ -64,6 +64,14 @@ impl<T, S> LinkedHashSet<T, S> {
     pub fn clear(&mut self) {
         self.map.clear()
     }
+
+    #[inline]
+    pub fn retain<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&T) -> bool,
+    {
+        self.map.retain(|k, _| f(k));
+    }
 }
 
 impl<T, S> LinkedHashSet<T, S>
@@ -96,7 +104,7 @@ where
     }
 
     #[inline]
-    pub fn try_reserve(&mut self, additional: usize) -> Result<(), hashbrown::CollectionAllocErr> {
+    pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
         self.map.try_reserve(additional)
     }
 
@@ -232,14 +240,6 @@ where
     }
 
     #[inline]
-    pub fn retain<F>(&mut self, mut f: F)
-    where
-        F: FnMut(&T) -> bool,
-    {
-        self.map.retain(|k, _| f(k));
-    }
-
-    #[inline]
     pub fn front(&self) -> Option<&T> {
         self.map.front().map(|(k, _)| k)
     }
@@ -351,8 +351,7 @@ where
 
 impl<T, S> Default for LinkedHashSet<T, S>
 where
-    T: Eq + Hash,
-    S: BuildHasher + Default,
+    S: Default,
 {
     #[inline]
     fn default() -> LinkedHashSet<T, S> {
