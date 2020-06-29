@@ -10,7 +10,7 @@ use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
 };
 
-use crate::{LinkedHashMap, LinkedHashSet, LruCache};
+use crate::{LinkedHashMap, LinkedHashSet};
 
 // LinkedHashMap impls
 
