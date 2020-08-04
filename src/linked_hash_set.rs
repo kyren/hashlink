@@ -258,6 +258,36 @@ where
     pub fn pop_back(&mut self) -> Option<T> {
         self.map.pop_back().map(|(k, _)| k)
     }
+
+    #[inline]
+    pub fn to_front<Q: ?Sized>(&mut self, value: &Q) -> bool
+    where
+        T: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        match self.map.raw_entry_mut().from_key(value) {
+            linked_hash_map::RawEntryMut::Occupied(mut occupied) => {
+                occupied.to_front();
+                true
+            }
+            linked_hash_map::RawEntryMut::Vacant(_) => false,
+        }
+    }
+
+    #[inline]
+    pub fn to_back<Q: ?Sized>(&mut self, value: &Q) -> bool
+    where
+        T: Borrow<Q>,
+        Q: Hash + Eq,
+    {
+        match self.map.raw_entry_mut().from_key(value) {
+            linked_hash_map::RawEntryMut::Occupied(mut occupied) => {
+                occupied.to_back();
+                true
+            }
+            linked_hash_map::RawEntryMut::Vacant(_) => false,
+        }
+    }
 }
 
 impl<T: Hash + Eq + Clone, S: BuildHasher + Clone> Clone for LinkedHashSet<T, S> {

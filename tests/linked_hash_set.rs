@@ -494,3 +494,19 @@ fn double_ended_iter() {
     assert_eq!(iter.next(), None);
     assert_eq!(iter.next_back(), None);
 }
+
+#[test]
+fn to_back_front_order() {
+    let mut set = LinkedHashSet::new();
+    set.insert(1);
+    set.insert(2);
+    set.insert(3);
+    set.insert(4);
+
+    assert_eq!(set.back().copied(), Some(4));
+    assert_eq!(set.front().copied(), Some(1));
+    set.to_back(&2);
+    assert_eq!(set.back().copied(), Some(2));
+    set.to_front(&3);
+    assert_eq!(set.front().copied(), Some(3));
+}

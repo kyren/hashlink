@@ -3,6 +3,8 @@
   hashbrown::TryReserveError type.
 - Adjust trait bounds for LinkedHashMap::retain, LinkedHashSet::default to be
   less strict (to match hashbrown)
+- Add optional serde support for `LinkedHashMap` and `LinkedHashSet`.
+- Add `to_back` and `to_front` methods for LinkedHashSet to control entry order.
 
 ## [0.5.1]
 - Add `LinkedHashMap::remove_entry` and `LruCache::remove_entry`
