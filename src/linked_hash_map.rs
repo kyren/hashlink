@@ -1028,7 +1028,7 @@ impl<'a, K, V, S> RawEntryMut<'a, K, V, S> {
 pub struct RawOccupiedEntryMut<'a, K, V> {
     free: &'a mut Option<NonNull<Node<K, V>>>,
     values: &'a mut Option<NonNull<Node<K, V>>>,
-    entry: hash_map::RawOccupiedEntryMut<'a, NonNull<Node<K, V>>, ()>,
+    entry: hash_map::RawOccupiedEntryMut<'a, NonNull<Node<K, V>>, (), NullHasher>,
 }
 
 impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {

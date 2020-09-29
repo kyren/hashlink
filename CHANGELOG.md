@@ -1,5 +1,5 @@
 ## [0.6.0]
-- API incompatible change: depend on hashbrown 0.8, re-export renamed
+- API incompatible change: depend on hashbrown 0.9, re-export renamed
   hashbrown::TryReserveError type.
 - Adjust trait bounds for LinkedHashMap::retain, LinkedHashSet::default to be
   less strict (to match hashbrown)
