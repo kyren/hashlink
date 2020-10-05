@@ -1,5 +1,6 @@
 use std::{
     borrow::Borrow,
+    fmt,
     hash::{BuildHasher, Hash},
     usize,
 };
@@ -275,5 +276,11 @@ impl<'a, K: Eq + Hash, V, S: BuildHasher> IntoIterator for &'a mut LruCache<K, V
     #[inline]
     fn into_iter(self) -> IterMut<'a, K, V> {
         self.iter_mut()
+    }
+}
+
+impl<A: fmt::Debug + Hash + Eq, B: fmt::Debug, S: BuildHasher> fmt::Debug for LruCache<A, B, S> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_map().entries(self.iter().rev()).finish()
     }
 }
