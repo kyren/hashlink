@@ -335,8 +335,7 @@ where
 
 impl<T, S> fmt::Debug for LinkedHashSet<T, S>
 where
-    T: Eq + Hash + fmt::Debug,
-    S: BuildHasher,
+    T: fmt::Debug,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -473,11 +472,7 @@ pub struct Union<'a, T, S> {
     iter: Chain<Iter<'a, T>, Difference<'a, T, S>>,
 }
 
-impl<'a, T, S> IntoIterator for &'a LinkedHashSet<T, S>
-where
-    T: Eq + Hash,
-    S: BuildHasher,
-{
+impl<'a, T, S> IntoIterator for &'a LinkedHashSet<T, S> {
     type Item = &'a T;
     type IntoIter = Iter<'a, T>;
 
@@ -487,11 +482,7 @@ where
     }
 }
 
-impl<T, S> IntoIterator for LinkedHashSet<T, S>
-where
-    T: Eq + Hash,
-    S: BuildHasher,
-{
+impl<T, S> IntoIterator for LinkedHashSet<T, S> {
     type Item = T;
     type IntoIter = IntoIter<T>;
 

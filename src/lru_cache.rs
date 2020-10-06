@@ -37,10 +37,7 @@ impl<K: Eq + Hash, V> LruCache<K, V> {
     }
 }
 
-impl<K: Eq + Hash, V, S> LruCache<K, V, S>
-where
-    S: BuildHasher,
-{
+impl<K, V, S> LruCache<K, V, S> {
     #[inline]
     pub fn with_hasher(capacity: usize, hash_builder: S) -> Self {
         LruCache {
@@ -49,6 +46,46 @@ where
         }
     }
 
+    #[inline]
+    pub fn capacity(&self) -> usize {
+        self.max_size
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
+    #[inline]
+    pub fn clear(&mut self) {
+        self.map.clear();
+    }
+
+    #[inline]
+    pub fn iter(&self) -> Iter<K, V> {
+        self.map.iter()
+    }
+
+    #[inline]
+    pub fn iter_mut(&mut self) -> IterMut<K, V> {
+        self.map.iter_mut()
+    }
+
+    #[inline]
+    pub fn drain(&mut self) -> Drain<K, V> {
+        self.map.drain()
+    }
+}
+
+impl<K: Eq + Hash, V, S> LruCache<K, V, S>
+where
+    S: BuildHasher,
+{
     #[inline]
     pub fn contains_key<Q>(&mut self, key: &Q) -> bool
     where
@@ -174,11 +211,6 @@ where
         self.map.remove_entry(k)
     }
 
-    #[inline]
-    pub fn capacity(&self) -> usize {
-        self.max_size
-    }
-
     /// Set the new cache capacity for the `LruCache`.
     ///
     /// If there are more entries in the `LruCache` than the new capacity will allow, they are
@@ -197,36 +229,6 @@ where
     #[inline]
     pub fn remove_lru(&mut self) -> Option<(K, V)> {
         self.map.pop_front()
-    }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.map.len()
-    }
-
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.map.is_empty()
-    }
-
-    #[inline]
-    pub fn clear(&mut self) {
-        self.map.clear();
-    }
-
-    #[inline]
-    pub fn iter(&self) -> Iter<K, V> {
-        self.map.iter()
-    }
-
-    #[inline]
-    pub fn iter_mut(&mut self) -> IterMut<K, V> {
-        self.map.iter_mut()
-    }
-
-    #[inline]
-    pub fn drain(&mut self) -> Drain<K, V> {
-        self.map.drain()
     }
 }
 
@@ -249,7 +251,7 @@ impl<K: Eq + Hash, V, S: BuildHasher> Extend<(K, V)> for LruCache<K, V, S> {
     }
 }
 
-impl<K: Eq + Hash, V, S: BuildHasher> IntoIterator for LruCache<K, V, S> {
+impl<K, V, S> IntoIterator for LruCache<K, V, S> {
     type Item = (K, V);
     type IntoIter = IntoIter<K, V>;
 
@@ -259,7 +261,7 @@ impl<K: Eq + Hash, V, S: BuildHasher> IntoIterator for LruCache<K, V, S> {
     }
 }
 
-impl<'a, K: Eq + Hash, V, S: BuildHasher> IntoIterator for &'a LruCache<K, V, S> {
+impl<'a, K, V, S> IntoIterator for &'a LruCache<K, V, S> {
     type Item = (&'a K, &'a V);
     type IntoIter = Iter<'a, K, V>;
 
@@ -269,7 +271,7 @@ impl<'a, K: Eq + Hash, V, S: BuildHasher> IntoIterator for &'a LruCache<K, V, S>
     }
 }
 
-impl<'a, K: Eq + Hash, V, S: BuildHasher> IntoIterator for &'a mut LruCache<K, V, S> {
+impl<'a, K, V, S> IntoIterator for &'a mut LruCache<K, V, S> {
     type Item = (&'a K, &'a mut V);
     type IntoIter = IterMut<'a, K, V>;
 
@@ -279,7 +281,11 @@ impl<'a, K: Eq + Hash, V, S: BuildHasher> IntoIterator for &'a mut LruCache<K, V
     }
 }
 
-impl<A: fmt::Debug + Hash + Eq, B: fmt::Debug, S: BuildHasher> fmt::Debug for LruCache<A, B, S> {
+impl<K, V, S> fmt::Debug for LruCache<K, V, S>
+where
+    K: fmt::Debug,
+    V: fmt::Debug,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_map().entries(self.iter().rev()).finish()
     }

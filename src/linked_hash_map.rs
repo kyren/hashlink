@@ -486,8 +486,10 @@ impl<K: Hash + Eq, V, S: BuildHasher + Default> FromIterator<(K, V)> for LinkedH
     }
 }
 
-impl<A: fmt::Debug + Hash + Eq, B: fmt::Debug, S: BuildHasher> fmt::Debug
-    for LinkedHashMap<A, B, S>
+impl<K, V, S> fmt::Debug for LinkedHashMap<K, V, S>
+where
+    K: fmt::Debug,
+    V: fmt::Debug,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -1764,7 +1766,7 @@ impl<'a, K, V> ExactSizeIterator for ValuesMut<'a, K, V> {
     }
 }
 
-impl<'a, K: Hash + Eq, V, S: BuildHasher> IntoIterator for &'a LinkedHashMap<K, V, S> {
+impl<'a, K, V, S> IntoIterator for &'a LinkedHashMap<K, V, S> {
     type Item = (&'a K, &'a V);
     type IntoIter = Iter<'a, K, V>;
 
@@ -1774,7 +1776,7 @@ impl<'a, K: Hash + Eq, V, S: BuildHasher> IntoIterator for &'a LinkedHashMap<K, 
     }
 }
 
-impl<'a, K: Hash + Eq, V, S: BuildHasher> IntoIterator for &'a mut LinkedHashMap<K, V, S> {
+impl<'a, K, V, S> IntoIterator for &'a mut LinkedHashMap<K, V, S> {
     type Item = (&'a K, &'a mut V);
     type IntoIter = IterMut<'a, K, V>;
 
@@ -1784,7 +1786,7 @@ impl<'a, K: Hash + Eq, V, S: BuildHasher> IntoIterator for &'a mut LinkedHashMap
     }
 }
 
-impl<K: Hash + Eq, V, S: BuildHasher> IntoIterator for LinkedHashMap<K, V, S> {
+impl<K, V, S> IntoIterator for LinkedHashMap<K, V, S> {
     type Item = (K, V);
     type IntoIter = IntoIter<K, V>;
 
