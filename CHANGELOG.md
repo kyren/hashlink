@@ -1,8 +1,16 @@
 ## [0.6.0]
 - API incompatible change: depend on hashbrown 0.9, re-export renamed
   hashbrown::TryReserveError type.
-- Adjust trait bounds for LinkedHashMap::retain, LinkedHashSet::default to be
-  less strict (to match hashbrown)
+- Add a `Debug` impl to `LruCache` (thanks @thomcc!)
+- Adjust trait bounds for `LinkedHashMap::retain`, `LinkedHashSet::default` to
+  be less strict (to match hashbrown)
+- Adjust trait bounds for all `Debug` impls to be less strict (to match
+  hashbrown).
+- Adjust trait bounds for all `IntoIterator` impls to be less strict (to match
+  hashbrown).
+- Adjust trait bounds for `LruCache::with_hasher`, `LruCache::capacity`,
+  `LruCache::len`, `LruCache::is_empty`, `LruCache::clear`, `LruCache::iter`,
+  `LruCache::iter_mut`, and `LruCache::drain` to be less strict
 - Add optional serde support for `LinkedHashMap` and `LinkedHashSet`.
 - Add `to_back` and `to_front` methods for LinkedHashSet to control entry order.
 
