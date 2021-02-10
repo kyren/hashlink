@@ -250,7 +250,7 @@ where
     }
 
     #[inline]
-    pub fn back(&mut self) -> Option<&T> {
+    pub fn back(&self) -> Option<&T> {
         self.map.back().map(|(k, _)| k)
     }
 
