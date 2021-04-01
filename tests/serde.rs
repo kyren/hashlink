@@ -35,7 +35,7 @@ fn map_serde_tokens() {
 
 #[test]
 fn map_serde_tokens_empty_generic() {
-    let map = LinkedHashMap::<char, u32>::new();
+    let map = LinkedHashMap::<char, u32, FxBuildHasher>::with_hasher(FxBuildHasher::default());
 
     assert_tokens(&map, &[Token::Map { len: Some(0) }, Token::MapEnd]);
 }
