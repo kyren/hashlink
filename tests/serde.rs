@@ -87,3 +87,22 @@ fn set_serde_tokens() {
         ],
     );
 }
+
+#[test]
+fn set_serde_tokens_generic() {
+    let mut set = LinkedHashSet::with_hasher(FxBuildHasher::default());
+    set.insert('a');
+    set.insert('b');
+    set.insert('c');
+
+    assert_tokens(
+        &set,
+        &[
+            Token::Seq { len: Some(3) },
+            Token::Char('a'),
+            Token::Char('b'),
+            Token::Char('c'),
+            Token::SeqEnd,
+        ],
+    );
+}
