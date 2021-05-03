@@ -17,7 +17,7 @@ circle-ci = { repository = "kyren/hashlink", branch = "master" }
 serde_impl = ["serde"]
 
 [dependencies]
-hashbrown = "0.9.0"
+hashbrown = "0.11.0"
 serde = { version = "1.0", optional = true }
 
 [dev-dependencies]
