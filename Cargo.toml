@@ -1,6 +1,6 @@
 [package]
 name = "hashlink"
-version = "0.7.0"
+version = "0.7.1-alpha.0"
 authors = ["kyren <kerriganw@gmail.com>"]
 edition = "2018"
 description = "HashMap-like containers that hold their key-value pairs in a user controllable order"
