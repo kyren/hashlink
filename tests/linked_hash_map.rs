@@ -511,3 +511,32 @@ fn test_order_equality() {
     map2.to_front("4");
     assert_eq!(map1, map2);
 }
+
+#[test]
+fn test_replace() {
+    let mut map = LinkedHashMap::new();
+
+    map.insert(1, 1);
+    map.insert(2, 2);
+    map.insert(3, 3);
+    map.insert(4, 4);
+
+    assert!(map
+        .iter()
+        .map(|(k, v)| (*k, *v))
+        .eq([(1, 1), (2, 2), (3, 3), (4, 4)].iter().copied()));
+
+    map.insert(3, 5);
+
+    assert!(map
+        .iter()
+        .map(|(k, v)| (*k, *v))
+        .eq([(1, 1), (2, 2), (4, 4), (3, 5)].iter().copied()));
+
+    map.replace(2, 6);
+
+    assert!(map
+        .iter()
+        .map(|(k, v)| (*k, *v))
+        .eq([(1, 1), (2, 6), (4, 4), (3, 5)].iter().copied()));
+}

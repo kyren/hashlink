@@ -378,6 +378,21 @@ where
         }
     }
 
+    /// If the given key is not in this map, inserts the key / value pair at the *back* of the
+    /// internal linked list and returns `None`, otherwise, replaces the existing value with the
+    /// given value *without* moving the entry in the internal linked list and returns the previous
+    /// value.
+    #[inline]
+    pub fn replace(&mut self, k: K, v: V) -> Option<V> {
+        match self.raw_entry_mut().from_key(&k) {
+            RawEntryMut::Occupied(mut occupied) => Some(occupied.replace_value(v)),
+            RawEntryMut::Vacant(vacant) => {
+                vacant.insert(k, v);
+                None
+            }
+        }
+    }
+
     #[inline]
     pub fn remove<Q>(&mut self, k: &Q) -> Option<V>
     where
