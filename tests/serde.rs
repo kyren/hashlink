@@ -1,4 +1,4 @@
-#![cfg(feature = "serde_impl")]
+#![cfg(feature = "serde")]
 
 use fxhash::FxBuildHasher;
 use hashlink::{LinkedHashMap, LinkedHashSet};
