@@ -1,11 +1,11 @@
-use std::{
+use crate::DefaultHashBuilder;
+
+use core::{
     borrow::Borrow,
     fmt,
     hash::{BuildHasher, Hash},
     usize,
 };
-
-use hashbrown::hash_map;
 
 use crate::linked_hash_map::{self, LinkedHashMap};
 
@@ -14,13 +14,13 @@ pub use crate::linked_hash_map::{
     RawOccupiedEntryMut, RawVacantEntryMut, VacantEntry,
 };
 
-pub struct LruCache<K, V, S = hash_map::DefaultHashBuilder> {
+pub struct LruCache<K, V, S = DefaultHashBuilder> {
     map: LinkedHashMap<K, V, S>,
     max_size: usize,
 }
 
 impl<K: Eq + Hash, V> LruCache<K, V> {
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn new(capacity: usize) -> Self {
         LruCache {
             map: LinkedHashMap::new(),
@@ -31,14 +31,14 @@ impl<K: Eq + Hash, V> LruCache<K, V> {
     /// Create a new unbounded `LruCache` that does not automatically evict entries.
     ///
     /// A simple convenience method that is equivalent to `LruCache::new(usize::MAX)`
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn new_unbounded() -> Self {
         LruCache::new(usize::MAX)
     }
 }
 
 impl<K, V, S> LruCache<K, V, S> {
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn with_hasher(capacity: usize, hash_builder: S) -> Self {
         LruCache {
             map: LinkedHashMap::with_hasher(hash_builder),
@@ -46,37 +46,37 @@ impl<K, V, S> LruCache<K, V, S> {
         }
     }
 
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn capacity(&self) -> usize {
         self.max_size
     }
 
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn len(&self) -> usize {
         self.map.len()
     }
 
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
 
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn clear(&mut self) {
         self.map.clear();
     }
 
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn iter(&self) -> Iter<K, V> {
         self.map.iter()
     }
 
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn iter_mut(&mut self) -> IterMut<K, V> {
         self.map.iter_mut()
     }
 
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn drain(&mut self) -> Drain<K, V> {
         self.map.drain()
     }
@@ -86,7 +86,7 @@ impl<K: Eq + Hash, V, S> LruCache<K, V, S>
 where
     S: BuildHasher,
 {
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn contains_key<Q>(&mut self, key: &Q) -> bool
     where
         K: Borrow<Q>,
@@ -98,7 +98,7 @@ where
     /// Insert a new value into the `LruCache`.
     ///
     /// If necessary, will remove the value at the front of the LRU list to make room.
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
         let old_val = self.map.insert(k, v);
         if self.len() > self.capacity() {
@@ -109,7 +109,7 @@ where
 
     /// Get the value for the given key, *without* marking the value as recently used and moving it
     /// to the back of the LRU list.
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn peek<Q>(&self, k: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
@@ -120,7 +120,7 @@ where
 
     /// Get the value for the given key mutably, *without* marking the value as recently used and
     /// moving it to the back of the LRU list.
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn peek_mut<Q>(&mut self, k: &Q) -> Option<&mut V>
     where
         K: Borrow<Q>,
@@ -131,7 +131,7 @@ where
 
     /// Retrieve the given key, marking it as recently used and moving it to the back of the LRU
     /// list.
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn get<Q>(&mut self, k: &Q) -> Option<&V>
     where
         K: Borrow<Q>,
@@ -142,7 +142,7 @@ where
 
     /// Retrieve the given key, marking it as recently used and moving it to the back of the LRU
     /// list.
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn get_mut<Q>(&mut self, k: &Q) -> Option<&mut V>
     where
         K: Borrow<Q>,
@@ -163,7 +163,7 @@ where
     /// The returned entry is not automatically moved to the back of the LRU list.  By calling
     /// `Entry::to_back` / `Entry::to_front` you can manually control the position of this entry in
     /// the LRU list.
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn entry(&mut self, key: K) -> Entry<'_, K, V, S> {
         if self.len() > self.capacity() {
             self.remove_lru();
@@ -174,7 +174,7 @@ where
     /// The constructed raw entry is never automatically moved to the back of the LRU list.  By
     /// calling `Entry::to_back` / `Entry::to_front` you can manually control the position of this
     /// entry in the LRU list.
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn raw_entry(&self) -> RawEntryBuilder<'_, K, V, S> {
         self.map.raw_entry()
     }
@@ -185,7 +185,7 @@ where
     /// The constructed raw entry is never automatically moved to the back of the LRU list.  By
     /// calling `Entry::to_back` / `Entry::to_front` you can manually control the position of this
     /// entry in the LRU list.
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn raw_entry_mut(&mut self) -> RawEntryBuilderMut<'_, K, V, S> {
         if self.len() > self.capacity() {
             self.remove_lru();
@@ -193,7 +193,7 @@ where
         self.map.raw_entry_mut()
     }
 
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn remove<Q>(&mut self, k: &Q) -> Option<V>
     where
         K: Borrow<Q>,
@@ -202,7 +202,7 @@ where
         self.map.remove(k)
     }
 
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn remove_entry<Q>(&mut self, k: &Q) -> Option<(K, V)>
     where
         K: Borrow<Q>,
@@ -215,7 +215,7 @@ where
     ///
     /// If there are more entries in the `LruCache` than the new capacity will allow, they are
     /// removed.
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     pub fn set_capacity(&mut self, capacity: usize) {
         for _ in capacity..self.len() {
             self.remove_lru();
@@ -233,7 +233,7 @@ where
 }
 
 impl<K: Hash + Eq + Clone, V: Clone, S: BuildHasher + Clone> Clone for LruCache<K, V, S> {
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     fn clone(&self) -> Self {
         LruCache {
             map: self.map.clone(),
@@ -243,7 +243,7 @@ impl<K: Hash + Eq + Clone, V: Clone, S: BuildHasher + Clone> Clone for LruCache<
 }
 
 impl<K: Eq + Hash, V, S: BuildHasher> Extend<(K, V)> for LruCache<K, V, S> {
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
         for (k, v) in iter {
             self.insert(k, v);
@@ -255,7 +255,7 @@ impl<K, V, S> IntoIterator for LruCache<K, V, S> {
     type Item = (K, V);
     type IntoIter = IntoIter<K, V>;
 
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     fn into_iter(self) -> IntoIter<K, V> {
         self.map.into_iter()
     }
@@ -265,7 +265,7 @@ impl<'a, K, V, S> IntoIterator for &'a LruCache<K, V, S> {
     type Item = (&'a K, &'a V);
     type IntoIter = Iter<'a, K, V>;
 
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     fn into_iter(self) -> Iter<'a, K, V> {
         self.iter()
     }
@@ -275,7 +275,7 @@ impl<'a, K, V, S> IntoIterator for &'a mut LruCache<K, V, S> {
     type Item = (&'a K, &'a mut V);
     type IntoIter = IterMut<'a, K, V>;
 
-    #[inline]
+    #[cfg_attr(feature = "inline-more", inline)]
     fn into_iter(self) -> IterMut<'a, K, V> {
         self.iter_mut()
     }

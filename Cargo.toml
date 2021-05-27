@@ -14,11 +14,26 @@ license = "MIT OR Apache-2.0"
 circle-ci = { repository = "kyren/hashlink", branch = "master" }
 
 [features]
-serde_impl = ["serde"]
+default = ["ahash", "inline-more", "lru"]
+
+ahash-compile-time-rng = ["ahash_/compile-time-rng"]
+
+ahash = [ "ahash_", "hashbrown/ahash" ]
+serde = [ "serde_", "hashbrown/serde" ]
+inline-more = [ "hashbrown/inline-more" ]
+
+amortized = ["griddle"]
+ahash-amortized = [ "ahash", "amortized", "griddle/ahash" ]
+serde-amortized = [ "serde", "amortized", "griddle/serde" ]
+inline-more-amortized = [ "inline-more", "amortized", "griddle/inline-more" ]
+
+lru = []
 
 [dependencies]
-hashbrown = "0.11.0"
-serde = { version = "1.0", optional = true }
+ahash_ = { version = "0.7", default-features = false, optional = true, package = "ahash" }
+hashbrown = { version = "0.11", default-features = false }
+griddle = { version = "0.5.1", default-features = false, optional = true }
+serde_ = { version = "1.0", default-features = false, optional = true, package = "serde" }
 
 [dev-dependencies]
 serde_test = "1.0"
