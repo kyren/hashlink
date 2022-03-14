@@ -1,3 +1,9 @@
+## [0.8.0]
+- API incompatible change: No longer re-export hashbrown types so that bumping hashbrown is no longer an API compatible change.
+- bump hashbrown to 0.12
+- Fix implementation of `shrink_to_fit` to not panic when called on non-empty
+  containers.
+
 ## [0.7.0]
 - API incompatible change: depend on hashbrown 0.11, changes re-exported types.
 - Fix `LinkedHashSet::back` to take `&self` not `&mut self`.
