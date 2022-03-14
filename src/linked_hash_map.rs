@@ -489,7 +489,7 @@ where
         unsafe {
             let len = self.map.len();
             if len != self.map.capacity() {
-                self.map.clear();
+                self.map = HashMap::with_hasher(NullHasher);
                 self.map.reserve(len);
 
                 if let Some(guard) = self.values {
