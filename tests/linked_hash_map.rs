@@ -540,3 +540,24 @@ fn test_replace() {
         .map(|(k, v)| (*k, *v))
         .eq([(1, 1), (2, 6), (4, 4), (3, 5)].iter().copied()));
 }
+
+#[test]
+fn test_shrink_to_fit_resize() {
+    let mut map = LinkedHashMap::new();
+    map.shrink_to_fit();
+
+    for i in 0..100 {
+        map.insert(i, i);
+    }
+    map.shrink_to_fit();
+
+    for _ in 0..50 {
+        map.pop_front();
+        map.shrink_to_fit();
+    }
+
+    assert_eq!(map.len(), 50);
+    for i in 50..100 {
+        assert_eq!(map.get(&i).unwrap(), &i);
+    }
+}

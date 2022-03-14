@@ -70,14 +70,6 @@ fn test_zero_capacities() {
     assert_eq!(s.capacity(), 0);
 
     let mut s = HS::new();
-    s.insert(1);
-    s.insert(2);
-    s.remove(&1);
-    s.remove(&2);
-    s.shrink_to_fit();
-    assert_eq!(s.capacity(), 0);
-
-    let mut s = HS::new();
     s.reserve(0);
     assert_eq!(s.capacity(), 0);
 }
