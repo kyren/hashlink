@@ -1,4 +1,5 @@
 use std::{
+    alloc::Layout,
     borrow::Borrow,
     cmp::Ordering,
     fmt,
@@ -12,7 +13,10 @@ use std::{
 
 use hashbrown::{hash_map, HashMap};
 
-pub type TryReserveError = hashbrown::TryReserveError;
+pub enum TryReserveError {
+    CapacityOverflow,
+    AllocError { layout: Layout },
+}
 
 /// A version of `HashMap` that has a user controllable order for its entries.
 ///
@@ -93,7 +97,12 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
 
     #[inline]
     pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
-        self.map.try_reserve(additional)
+        self.map.try_reserve(additional).map_err(|e| match e {
+            hashbrown::TryReserveError::CapacityOverflow => TryReserveError::CapacityOverflow,
+            hashbrown::TryReserveError::AllocError { layout } => {
+                TryReserveError::AllocError { layout }
+            }
+        })
     }
 
     #[inline]
