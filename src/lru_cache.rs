@@ -14,12 +14,19 @@ pub use crate::linked_hash_map::{
     RawOccupiedEntryMut, RawVacantEntryMut, VacantEntry,
 };
 
-pub struct LruCache<K, V, S = hash_map::DefaultHashBuilder> {
-    map: LinkedHashMap<K, V, S>,
-    max_size: usize,
+pub struct LruCache<K, V, S = hash_map::DefaultHashBuilder>
+where
+    K: Eq + Hash,
+    S: BuildHasher + Default,
+{
+    pub(crate) map: LinkedHashMap<K, V, S>,
+    pub(crate) max_size: usize,
 }
 
-impl<K: Eq + Hash, V> LruCache<K, V> {
+impl<K, V> LruCache<K, V>
+where
+    K: Eq + Hash,
+{
     #[inline]
     pub fn new(capacity: usize) -> Self {
         LruCache {
@@ -37,7 +44,31 @@ impl<K: Eq + Hash, V> LruCache<K, V> {
     }
 }
 
-impl<K, V, S> LruCache<K, V, S> {
+impl<K, V, S> PartialEq for LruCache<K, V, S>
+where
+    K: Eq + Hash,
+    V: Eq,
+    S: BuildHasher + Default,
+{
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.len() == other.len() && self.capacity() == other.capacity() && self.iter().eq(other)
+    }
+}
+
+impl<K, V, S> Eq for LruCache<K, V, S>
+where
+    K: Eq + Hash,
+    V: Eq,
+    S: BuildHasher + Default,
+{
+}
+
+impl<K, V, S> LruCache<K, V, S>
+where
+    K: Eq + Hash,
+    S: BuildHasher + Default,
+{
     #[inline]
     pub fn with_hasher(capacity: usize, hash_builder: S) -> Self {
         LruCache {
@@ -82,9 +113,10 @@ impl<K, V, S> LruCache<K, V, S> {
     }
 }
 
-impl<K: Eq + Hash, V, S> LruCache<K, V, S>
+impl<K, V, S> LruCache<K, V, S>
 where
-    S: BuildHasher,
+    K: Eq + Hash,
+    S: BuildHasher + Default,
 {
     #[inline]
     pub fn contains_key<Q>(&mut self, key: &Q) -> bool
@@ -232,7 +264,7 @@ where
     }
 }
 
-impl<K: Hash + Eq + Clone, V: Clone, S: BuildHasher + Clone> Clone for LruCache<K, V, S> {
+impl<K: Hash + Eq + Clone, V: Clone, S: BuildHasher + Default + Clone> Clone for LruCache<K, V, S> {
     #[inline]
     fn clone(&self) -> Self {
         LruCache {
@@ -242,7 +274,7 @@ impl<K: Hash + Eq + Clone, V: Clone, S: BuildHasher + Clone> Clone for LruCache<
     }
 }
 
-impl<K: Eq + Hash, V, S: BuildHasher> Extend<(K, V)> for LruCache<K, V, S> {
+impl<K: Eq + Hash, V, S: BuildHasher + Default> Extend<(K, V)> for LruCache<K, V, S> {
     #[inline]
     fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
         for (k, v) in iter {
@@ -251,7 +283,11 @@ impl<K: Eq + Hash, V, S: BuildHasher> Extend<(K, V)> for LruCache<K, V, S> {
     }
 }
 
-impl<K, V, S> IntoIterator for LruCache<K, V, S> {
+impl<K, V, S> IntoIterator for LruCache<K, V, S>
+where
+    K: Eq + Hash,
+    S: BuildHasher + Default,
+{
     type Item = (K, V);
     type IntoIter = IntoIter<K, V>;
 
@@ -261,7 +297,11 @@ impl<K, V, S> IntoIterator for LruCache<K, V, S> {
     }
 }
 
-impl<'a, K, V, S> IntoIterator for &'a LruCache<K, V, S> {
+impl<'a, K, V, S> IntoIterator for &'a LruCache<K, V, S>
+where
+    K: Eq + Hash,
+    S: BuildHasher + Default,
+{
     type Item = (&'a K, &'a V);
     type IntoIter = Iter<'a, K, V>;
 
@@ -271,7 +311,11 @@ impl<'a, K, V, S> IntoIterator for &'a LruCache<K, V, S> {
     }
 }
 
-impl<'a, K, V, S> IntoIterator for &'a mut LruCache<K, V, S> {
+impl<'a, K, V, S> IntoIterator for &'a mut LruCache<K, V, S>
+where
+    K: Eq + Hash,
+    S: BuildHasher + Default,
+{
     type Item = (&'a K, &'a mut V);
     type IntoIter = IterMut<'a, K, V>;
 
@@ -283,8 +327,9 @@ impl<'a, K, V, S> IntoIterator for &'a mut LruCache<K, V, S> {
 
 impl<K, V, S> fmt::Debug for LruCache<K, V, S>
 where
-    K: fmt::Debug,
+    K: Eq + Hash + fmt::Debug,
     V: fmt::Debug,
+    S: BuildHasher + Default,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_map().entries(self.iter().rev()).finish()
