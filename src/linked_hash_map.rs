@@ -236,6 +236,28 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
     }
 
     #[inline]
+    pub fn retain<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&K, &mut V) -> bool,
+    {
+        let free = self.free;
+        let mut drop_filtered_values = DropFilteredValues {
+            free: &mut self.free,
+            cur_free: free,
+        };
+
+        self.map.retain(|&node, _| unsafe {
+            let (k, v) = (*node.as_ptr()).entry_mut();
+            if f(k, v) {
+                true
+            } else {
+                drop_filtered_values.drop_later(node);
+                false
+            }
+        });
+    }
+
+    #[inline]
     pub fn hasher(&self) -> &S {
         &self.hash_builder
     }
@@ -470,46 +492,10 @@ where
         }
     }
 
-    pub fn retain<F>(&mut self, mut f: F)
+    pub fn retain_with_order<F>(&mut self, mut f: F)
     where
         F: FnMut(&K, &mut V) -> bool,
     {
-        // We do not drop the key and value when a value is filtered from the map during the call to
-        // `retain`.  We need to be very careful not to have a live `HashMap` entry pointing to
-        // either a dangling `Node` or a `Node` with dropped keys / values.  Since the key and value
-        // types may panic on drop, they may short-circuit the entry in the map actually being
-        // removed.  Instead, we push the removed nodes onto the free list eagerly, then try and
-        // drop the keys and values for any newly freed nodes *after* `HashMap::retain` has
-        // completely finished.
-        struct DropFilteredValues<'a, K, V> {
-            free: &'a mut Option<NonNull<Node<K, V>>>,
-            cur_free: Option<NonNull<Node<K, V>>>,
-        }
-
-        impl<'a, K, V> DropFilteredValues<'a, K, V> {
-            #[inline]
-            fn drop_later(&mut self, node: NonNull<Node<K, V>>) {
-                unsafe {
-                    detach_node(node);
-                    push_free(&mut self.cur_free, node);
-                }
-            }
-        }
-
-        impl<'a, K, V> Drop for DropFilteredValues<'a, K, V> {
-            fn drop(&mut self) {
-                unsafe {
-                    let end_free = self.cur_free;
-                    while self.cur_free != *self.free {
-                        let cur_free = self.cur_free.as_ptr();
-                        (*cur_free).take_entry();
-                        self.cur_free = (*cur_free).links.free.next;
-                    }
-                    *self.free = end_free;
-                }
-            }
-        }
-
         let free = self.free;
         let mut drop_filtered_values = DropFilteredValues {
             free: &mut self.free,
@@ -2150,4 +2136,40 @@ where
     let mut hasher = s.build_hasher();
     k.hash(&mut hasher);
     hasher.finish()
+}
+
+// We do not drop the key and value when a value is filtered from the map during the call to
+// `retain`.  We need to be very careful not to have a live `HashMap` entry pointing to
+// either a dangling `Node` or a `Node` with dropped keys / values.  Since the key and value
+// types may panic on drop, they may short-circuit the entry in the map actually being
+// removed.  Instead, we push the removed nodes onto the free list eagerly, then try and
+// drop the keys and values for any newly freed nodes *after* `HashMap::retain` has
+// completely finished.
+struct DropFilteredValues<'a, K, V> {
+    free: &'a mut Option<NonNull<Node<K, V>>>,
+    cur_free: Option<NonNull<Node<K, V>>>,
+}
+
+impl<'a, K, V> DropFilteredValues<'a, K, V> {
+    #[inline]
+    fn drop_later(&mut self, node: NonNull<Node<K, V>>) {
+        unsafe {
+            detach_node(node);
+            push_free(&mut self.cur_free, node);
+        }
+    }
+}
+
+impl<'a, K, V> Drop for DropFilteredValues<'a, K, V> {
+    fn drop(&mut self) {
+        unsafe {
+            let end_free = self.cur_free;
+            while self.cur_free != *self.free {
+                let cur_free = self.cur_free.as_ptr();
+                (*cur_free).take_entry();
+                self.cur_free = (*cur_free).links.free.next;
+            }
+            *self.free = end_free;
+        }
+    }
 }

@@ -424,11 +424,11 @@ fn test_retain() {
 }
 
 #[test]
-fn test_retain_order() {
+fn test_retain_with_order() {
     let xs = [1, 2, 3, 4, 5, 6];
     let mut set: LinkedHashSet<i32> = xs.iter().cloned().collect();
     let mut vec = Vec::new();
-    set.retain(|&k| {
+    set.retain_with_order(|&k| {
         if k % 2 == 0 {
             true
         } else {

@@ -64,6 +64,14 @@ impl<T, S> LinkedHashSet<T, S> {
     pub fn clear(&mut self) {
         self.map.clear()
     }
+
+    #[inline]
+    pub fn retain<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&T) -> bool,
+    {
+        self.map.retain(|k, _| f(k));
+    }
 }
 
 impl<T, S> LinkedHashSet<T, S>
@@ -291,11 +299,11 @@ where
     }
 
     #[inline]
-    pub fn retain<F>(&mut self, mut f: F)
+    pub fn retain_with_order<F>(&mut self, mut f: F)
     where
         F: FnMut(&T) -> bool,
     {
-        self.map.retain(|k, _| f(k));
+        self.map.retain_with_order(|k, _| f(k));
     }
 }
 
