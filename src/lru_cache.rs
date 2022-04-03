@@ -262,6 +262,14 @@ where
     pub fn remove_lru(&mut self) -> Option<(K, V)> {
         self.map.pop_front()
     }
+
+    /// Peek at the least recently used entry and return a reference to it.
+    ///
+    /// If the `LruCache` is empty this will return None.
+    #[inline]
+    pub fn peek_lru(&mut self) -> Option<(&K, &V)> {
+        self.map.front()
+    }
 }
 
 impl<K: Hash + Eq + Clone, V: Clone, S: BuildHasher + Default + Clone> Clone for LruCache<K, V, S> {
