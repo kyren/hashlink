@@ -507,8 +507,12 @@ where
                 let mut cur = values.as_ref().links.value.next;
                 while cur != values {
                     let next = cur.as_ref().links.value.next;
-                    let (k, v) = (*cur.as_ptr()).entry_mut();
-                    if !f(k, v) {
+                    let filter = {
+                        let (k, v) = (*cur.as_ptr()).entry_mut();
+                        !f(k, v)
+                    };
+                    if filter {
+                        let k = (*cur.as_ptr()).key_ref();
                         let hash = hash_key(&self.hash_builder, k);
                         match self
                             .map
