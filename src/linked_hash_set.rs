@@ -297,6 +297,14 @@ where
             linked_hash_map::RawEntryMut::Vacant(_) => false,
         }
     }
+
+    #[inline]
+    pub fn retain_with_order<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&T) -> bool,
+    {
+        self.map.retain_with_order(|k, _| f(k));
+    }
 }
 
 impl<T: Hash + Eq + Clone, S: BuildHasher + Clone> Clone for LinkedHashSet<T, S> {
