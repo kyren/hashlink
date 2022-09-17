@@ -1,5 +1,10 @@
+## [0.8.1]
+- Add `retain_with_order` methods, equivalent to `retain` but which iterate
+  through the map in the proper linked list order
+
 ## [0.8.0]
-- API incompatible change: No longer re-export hashbrown types so that bumping hashbrown is no longer an API compatible change.
+- API incompatible change: No longer re-export hashbrown types so that bumping
+  hashbrown is no longer an API compatible change.
 - bump hashbrown to 0.12
 - Fix implementation of `shrink_to_fit` to not panic when called on non-empty
   containers.
