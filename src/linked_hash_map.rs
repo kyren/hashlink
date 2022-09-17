@@ -647,7 +647,7 @@ impl<K, V, S> Drop for LinkedHashMap<K, V, S> {
         unsafe {
             if let Some(values) = self.values {
                 drop_value_nodes(values);
-                Box::from_raw(values.as_ptr());
+                let _ = Box::from_raw(values.as_ptr());
             }
             drop_free_nodes(self.free);
         }
@@ -1697,7 +1697,7 @@ impl<K, V> Drop for IntoIter<K, V> {
                 let tail = self.tail.as_ptr();
                 self.tail = Some((*tail).links.value.prev);
                 (*tail).take_entry();
-                Box::from_raw(tail);
+                let _ = Box::from_raw(tail);
             }
         }
     }
@@ -1889,7 +1889,7 @@ impl<K, V, S> IntoIterator for LinkedHashMap<K, V, S> {
                     prev: tail,
                 } = values.as_ref().links.value;
 
-                Box::from_raw(self.values.as_ptr());
+                let _ = Box::from_raw(self.values.as_ptr());
                 self.values = None;
 
                 (Some(head), Some(tail))
@@ -2105,7 +2105,7 @@ unsafe fn drop_value_nodes<K, V>(guard: NonNull<Node<K, V>>) {
     while cur != guard {
         let prev = cur.as_ref().links.value.prev;
         cur.as_mut().take_entry();
-        Box::from_raw(cur.as_ptr());
+        let _ = Box::from_raw(cur.as_ptr());
         cur = prev;
     }
 }
@@ -2116,7 +2116,7 @@ unsafe fn drop_value_nodes<K, V>(guard: NonNull<Node<K, V>>) {
 unsafe fn drop_free_nodes<K, V>(mut free: Option<NonNull<Node<K, V>>>) {
     while let Some(some_free) = free {
         let next_free = some_free.as_ref().links.free.next;
-        Box::from_raw(some_free.as_ptr());
+        let _ = Box::from_raw(some_free.as_ptr());
         free = next_free;
     }
 }
