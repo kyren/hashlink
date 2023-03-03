@@ -131,10 +131,12 @@ where
     ///
     /// If necessary, will remove the value at the front of the LRU list to make room.
     #[inline]
-    pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+    pub fn insert<F: FnOnce(K, V)>(&mut self, k: K, v: V, remove_lru_callback: F) -> Option<V> {
         let old_val = self.map.insert(k, v);
         if self.len() > self.capacity() {
-            self.remove_lru();
+            if let Some(x) = self.remove_lru() {
+                remove_lru_callback(x.0, x.1)
+            }
         }
         old_val
     }
@@ -196,9 +198,11 @@ where
     /// `Entry::to_back` / `Entry::to_front` you can manually control the position of this entry in
     /// the LRU list.
     #[inline]
-    pub fn entry(&mut self, key: K) -> Entry<'_, K, V, S> {
+    pub fn entry<F: FnOnce(K, V)>(&mut self, key: K, remove_lru_callback: F) -> Entry<'_, K, V, S> {
         if self.len() > self.capacity() {
-            self.remove_lru();
+            if let Some(x) = self.remove_lru() {
+                remove_lru_callback(x.0, x.1)
+            }
         }
         self.map.entry(key)
     }
@@ -218,9 +222,14 @@ where
     /// calling `Entry::to_back` / `Entry::to_front` you can manually control the position of this
     /// entry in the LRU list.
     #[inline]
-    pub fn raw_entry_mut(&mut self) -> RawEntryBuilderMut<'_, K, V, S> {
+    pub fn raw_entry_mut<F: FnOnce(K, V)>(
+        &mut self,
+        remove_lru_callback: F,
+    ) -> RawEntryBuilderMut<'_, K, V, S> {
         if self.len() > self.capacity() {
-            self.remove_lru();
+            if let Some(x) = self.remove_lru() {
+                remove_lru_callback(x.0, x.1)
+            }
         }
         self.map.raw_entry_mut()
     }
@@ -248,9 +257,11 @@ where
     /// If there are more entries in the `LruCache` than the new capacity will allow, they are
     /// removed.
     #[inline]
-    pub fn set_capacity(&mut self, capacity: usize) {
+    pub fn set_capacity<F: Fn(K, V)>(&mut self, capacity: usize, remove_lru_callback: F) {
         for _ in capacity..self.len() {
-            self.remove_lru();
+            if let Some(x) = self.remove_lru() {
+                remove_lru_callback(x.0, x.1)
+            }
         }
         self.max_size = capacity;
     }
@@ -286,7 +297,11 @@ impl<K: Eq + Hash, V, S: BuildHasher + Default> Extend<(K, V)> for LruCache<K, V
     #[inline]
     fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
         for (k, v) in iter {
-            self.insert(k, v);
+            //self.insert(k, v);
+            self.map.insert(k, v);
+            if self.len() > self.capacity() {
+                self.remove_lru();
+            }
         }
     }
 }
