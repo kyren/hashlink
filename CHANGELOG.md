@@ -1,3 +1,6 @@
+## [0.8.3]
+- bump hashbrown to 0.14
+
 ## [0.8.2]
 - bump hashbrown to 0.13
 
