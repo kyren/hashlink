@@ -447,6 +447,78 @@ fn test_drain() {
 }
 
 #[test]
+fn test_iter_at_key() {
+    let mut map = LinkedHashMap::new();
+
+    map.insert("a", 10);
+    map.insert("b", 20);
+    map.insert("c", 30);
+
+    assert_eq!(map.iter_at_key(&"e").is_none(), true);
+
+    // regular iter
+    let mut iter = map.iter_at_key(&"b").unwrap();
+    assert_eq!((&"b", &20), iter.next().unwrap());
+    assert_eq!((&"c", &30), iter.next().unwrap());
+    assert_eq!(None, iter.next());
+    assert_eq!(None, iter.next());
+
+    let mut iter = map.iter_at_key(&"b").unwrap();
+    assert_eq!((&"b", &20), iter.next().unwrap());
+    let mut iclone = iter.clone();
+    assert_eq!((&"c", &30), iter.next().unwrap());
+    assert_eq!((&"c", &30), iclone.next().unwrap());
+
+    // reversed iter
+    let mut rev_iter = map.iter_at_key(&"b").unwrap().rev();
+    assert_eq!((&"c", &30), rev_iter.next().unwrap());
+    assert_eq!((&"b", &20), rev_iter.next().unwrap());
+    assert_eq!(None, rev_iter.next());
+    assert_eq!(None, rev_iter.next());
+
+    // mixed
+    let mut mixed_iter = map.iter_at_key(&"b").unwrap();
+    assert_eq!((&"b", &20), mixed_iter.next().unwrap());
+    assert_eq!((&"c", &30), mixed_iter.next_back().unwrap());
+    assert_eq!(None, mixed_iter.next());
+    assert_eq!(None, mixed_iter.next_back());
+}
+
+#[test]
+fn test_iter_at_key_mut() {
+    let mut map = LinkedHashMap::new();
+    map.insert("a", 10);
+    map.insert("c", 30);
+    map.insert("b", 20);
+    map.insert("d", 40);
+
+    {
+        assert_eq!(map.iter_at_key_mut(&"e").is_none(), true);
+
+        let mut iter = map.iter_at_key_mut(&"c").unwrap();
+        let entry = iter.next().unwrap();
+        assert_eq!("c", *entry.0);
+        *entry.1 = 17;
+
+        assert_eq!(format!("{:?}", iter), "[(\"b\", 20), (\"d\", 40)]");
+
+        // reverse iterator
+        let mut iter = iter.rev();
+        let entry = iter.next().unwrap();
+        assert_eq!("d", *entry.0);
+        *entry.1 = 23;
+
+        let entry = iter.next().unwrap();
+        assert_eq!("b", *entry.0);
+        assert_eq!(None, iter.next());
+        assert_eq!(None, iter.next());
+    }
+
+    assert_eq!(17, map[&"c"]);
+    assert_eq!(23, map[&"d"]);
+}
+
+#[test]
 fn test_send_sync() {
     fn is_send_sync<T: Send + Sync>() {}
 
@@ -458,6 +530,8 @@ fn test_send_sync() {
     is_send_sync::<linked_hash_map::Iter<u32, i32>>();
     is_send_sync::<linked_hash_map::IterMut<u32, i32>>();
     is_send_sync::<linked_hash_map::Drain<u32, i32>>();
+    is_send_sync::<linked_hash_map::IterAtKey<u32, i32>>();
+    is_send_sync::<linked_hash_map::IterAtKeyMut<u32, i32>>();
     is_send_sync::<linked_hash_map::Keys<u32, i32>>();
     is_send_sync::<linked_hash_map::Values<u32, i32>>();
 }
