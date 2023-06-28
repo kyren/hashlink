@@ -1,4 +1,4 @@
-use std::{
+use core::{
     alloc::Layout,
     borrow::Borrow,
     cmp::Ordering,
@@ -11,6 +11,7 @@ use std::{
     ptr::{self, NonNull},
 };
 
+use alloc::boxed::Box;
 use hashbrown::{hash_map, HashMap};
 
 pub enum TryReserveError {
