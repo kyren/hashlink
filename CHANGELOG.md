@@ -1,3 +1,6 @@
+## [0.8.4]
+- Now builds with `#![no_std]`.
+
 ## [0.8.3]
 - bump hashbrown to 0.14
 
