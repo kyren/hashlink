@@ -18,7 +18,7 @@ serde_impl = ["serde"]
 
 [dependencies]
 hashbrown = "0.14"
-serde = { version = "1.0", default_features = false, optional = true }
+serde = { version = "1.0", default-features = false, optional = true }
 
 [dev-dependencies]
 serde_test = "1.0"
