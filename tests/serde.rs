@@ -1,6 +1,5 @@
 #![cfg(feature = "serde_impl")]
 
-use fxhash::FxBuildHasher;
 use hashlink::{LinkedHashMap, LinkedHashSet, LruCache};
 use rustc_hash::FxHasher;
 use serde_test::{assert_tokens, Token};
@@ -175,7 +174,10 @@ fn lru_serde_tokens() {
 
 #[test]
 fn lru_serde_tokens_empty_generic() {
-    let map = LruCache::<char, u32, FxBuildHasher>::with_hasher(16, FxBuildHasher::default());
+    let map = LruCache::<char, u32, BuildHasherDefault<FxHasher>>::with_hasher(
+        16,
+        BuildHasherDefault::<FxHasher>::default(),
+    );
 
     assert_tokens(
         &map,
@@ -196,7 +198,7 @@ fn lru_serde_tokens_empty_generic() {
 
 #[test]
 fn lru_serde_tokens_generic() {
-    let mut map = LruCache::with_hasher(16, FxBuildHasher::default());
+    let mut map = LruCache::with_hasher(16, BuildHasherDefault::<FxHasher>::default());
     map.insert('a', 10);
     map.insert('b', 20);
     map.insert('c', 30);

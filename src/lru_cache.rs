@@ -131,7 +131,25 @@ where
     ///
     /// If necessary, will remove the value at the front of the LRU list to make room.
     #[inline]
-    pub fn insert<F: FnOnce(K, V)>(&mut self, k: K, v: V, remove_lru_callback: F) -> Option<V> {
+    pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+        let old_val = self.map.insert(k, v);
+        if self.len() > self.capacity() {
+            self.remove_lru();
+        }
+        old_val
+    }
+
+    /// Insert a new value into the `LruCache` with LRU callback.
+    ///
+    /// If necessary, will remove the value at the front of the LRU list to make room.
+    /// Calls a callback if there was an LRU removed value
+    #[inline]
+    pub fn insert_with_callback<F: FnOnce(K, V)>(
+        &mut self,
+        k: K,
+        v: V,
+        remove_lru_callback: F,
+    ) -> Option<V> {
         let old_val = self.map.insert(k, v);
         if self.len() > self.capacity() {
             if let Some(x) = self.remove_lru() {
@@ -198,7 +216,28 @@ where
     /// `Entry::to_back` / `Entry::to_front` you can manually control the position of this entry in
     /// the LRU list.
     #[inline]
-    pub fn entry<F: FnOnce(K, V)>(&mut self, key: K, remove_lru_callback: F) -> Entry<'_, K, V, S> {
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V, S> {
+        if self.len() > self.capacity() {
+            self.remove_lru();
+        }
+        self.map.entry(key)
+    }
+
+    /// Like `entry` but with LRU callback.
+    /// If the returned entry is vacant, it will always have room to insert a single value.  By
+    /// using the entry API, you can exceed the configured capacity by 1.
+    ///
+    /// The returned entry is not automatically moved to the back of the LRU list.  By calling
+    /// `Entry::to_back` / `Entry::to_front` you can manually control the position of this entry in
+    /// the LRU list.
+    /// Calls a callback if there was an LRU removed value
+
+    #[inline]
+    pub fn entry_with_callback<F: FnOnce(K, V)>(
+        &mut self,
+        key: K,
+        remove_lru_callback: F,
+    ) -> Entry<'_, K, V, S> {
         if self.len() > self.capacity() {
             if let Some(x) = self.remove_lru() {
                 remove_lru_callback(x.0, x.1)
@@ -221,8 +260,25 @@ where
     /// The constructed raw entry is never automatically moved to the back of the LRU list.  By
     /// calling `Entry::to_back` / `Entry::to_front` you can manually control the position of this
     /// entry in the LRU list.
+    /// Calls a callback if there was an LRU removed value
+
     #[inline]
-    pub fn raw_entry_mut<F: FnOnce(K, V)>(
+    pub fn raw_entry_mut(&mut self) -> RawEntryBuilderMut<'_, K, V, S> {
+        if self.len() > self.capacity() {
+            self.remove_lru();
+        }
+        self.map.raw_entry_mut()
+    }
+
+    /// Like `raw_entry` but with LRU callback.
+    /// If the constructed raw entry is vacant, it will always have room to insert a single value.
+    /// By using the raw entry API, you can exceed the configured capacity by 1.
+    ///
+    /// The constructed raw entry is never automatically moved to the back of the LRU list.  By
+    /// calling `Entry::to_back` / `Entry::to_front` you can manually control the position of this
+    /// entry in the LRU list.
+    #[inline]
+    pub fn raw_entry_mut_with_callback<F: FnOnce(K, V)>(
         &mut self,
         remove_lru_callback: F,
     ) -> RawEntryBuilderMut<'_, K, V, S> {
@@ -257,7 +313,25 @@ where
     /// If there are more entries in the `LruCache` than the new capacity will allow, they are
     /// removed.
     #[inline]
-    pub fn set_capacity<F: Fn(K, V)>(&mut self, capacity: usize, remove_lru_callback: F) {
+    pub fn set_capacity(&mut self, capacity: usize) {
+        for _ in capacity..self.len() {
+            self.remove_lru();
+        }
+        self.max_size = capacity;
+    }
+
+    /// Like `set_capacity` but with LRU callback.
+    /// Set the new cache capacity for the `LruCache` with an LRU callback.
+    ///
+    /// If there are more entries in the `LruCache` than the new capacity will allow, they are
+    /// removed.
+    /// Calls a callback if there was an LRU removed value
+    #[inline]
+    pub fn set_capacity_with_callback<F: Fn(K, V)>(
+        &mut self,
+        capacity: usize,
+        remove_lru_callback: F,
+    ) {
         for _ in capacity..self.len() {
             if let Some(x) = self.remove_lru() {
                 remove_lru_callback(x.0, x.1)
