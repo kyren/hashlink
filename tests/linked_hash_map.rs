@@ -542,6 +542,20 @@ fn test_replace() {
 }
 
 #[test]
+fn test_reserve() {
+    let mut map = LinkedHashMap::new();
+
+    map.insert(1, 1);
+    map.insert(2, 2);
+    map.insert(3, 3);
+    map.insert(4, 4);
+
+    assert!(map.capacity() - map.len() < 100);
+    map.reserve(100);
+    assert!(map.capacity() - map.len() >= 100);
+}
+
+#[test]
 fn test_shrink_to_fit_resize() {
     let mut map = LinkedHashMap::new();
     map.shrink_to_fit();

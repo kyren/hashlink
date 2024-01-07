@@ -161,7 +161,7 @@ where
         T: Borrow<Q>,
         Q: Hash + Eq,
     {
-        self.map.raw_entry().from_key(value).map(|p| p.0)
+        self.map.get_key_value(value).map(|p| p.0)
     }
 
     #[inline]
@@ -242,10 +242,7 @@ where
         T: Borrow<Q>,
         Q: Hash + Eq,
     {
-        match self.map.raw_entry_mut().from_key(value) {
-            linked_hash_map::RawEntryMut::Occupied(occupied) => Some(occupied.remove_entry().0),
-            linked_hash_map::RawEntryMut::Vacant(_) => None,
-        }
+        self.map.remove_entry(value).map(|(k, _)| k)
     }
 
     #[inline]
