@@ -238,7 +238,7 @@ impl<K, V, S> LinkedHashMap<K, V, S> {
 
     #[inline]
     pub fn hasher(&self) -> &S {
-        &self.map.hasher()
+        self.map.hasher()
     }
 
     #[inline]
@@ -1958,12 +1958,12 @@ impl<K, V> NodeKey<K, V> {
 
     #[inline]
     fn key_ref(&self) -> &K {
-        &self.entry_ref().0
+        self.entry_ref().0
     }
 
     #[inline]
     fn value_ref(&self) -> &V {
-        &self.entry_ref().1
+        self.entry_ref().1
     }
 }
 
