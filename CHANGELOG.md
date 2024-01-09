@@ -1,3 +1,9 @@
+## [0.9.0]
+- API incompatible change: Don't panic in `reserve` and `try_reserve` in cases
+  where a rehash is needed. Previously would panic, adds the proper bounds on
+  reserve methods to do a rehash (previously bounds were missing, and reserve
+  would result in panics). (Thank you @cuviper)
+
 ## [0.8.4]
 - Now builds with `#![no_std]`.
 
