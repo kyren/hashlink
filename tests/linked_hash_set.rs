@@ -147,6 +147,44 @@ fn test_iterate() {
 }
 
 #[test]
+fn test_iter_at_key() {
+    let mut map = LinkedHashSet::new();
+
+    map.insert("a");
+    map.insert("b");
+    map.insert("c");
+
+    assert_eq!(map.iter_at_key(&"e").is_none(), true);
+
+    // regular iter
+    let mut iter = map.iter_at_key(&"b").unwrap();
+    assert_eq!(&"b", iter.next().unwrap());
+    assert_eq!(&"c", iter.next().unwrap());
+    assert_eq!(None, iter.next());
+    assert_eq!(None, iter.next());
+
+    let mut iter = map.iter_at_key(&"b").unwrap();
+    assert_eq!(&"b", iter.next().unwrap());
+    let mut iclone = iter.clone();
+    assert_eq!(&"c", iter.next().unwrap());
+    assert_eq!(&"c", iclone.next().unwrap());
+
+    // reversed iter
+    let mut rev_iter = map.iter_at_key(&"b").unwrap().rev();
+    assert_eq!(&"c", rev_iter.next().unwrap());
+    assert_eq!(&"b", rev_iter.next().unwrap());
+    assert_eq!(None, rev_iter.next());
+    assert_eq!(None, rev_iter.next());
+
+    // mixed
+    let mut mixed_iter = map.iter_at_key(&"b").unwrap();
+    assert_eq!(&"b", mixed_iter.next().unwrap());
+    assert_eq!(&"c", mixed_iter.next_back().unwrap());
+    assert_eq!(None, mixed_iter.next());
+    assert_eq!(None, mixed_iter.next_back());
+}
+
+#[test]
 fn test_intersection() {
     let mut a = LinkedHashSet::new();
     let mut b = LinkedHashSet::new();

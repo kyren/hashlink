@@ -305,6 +305,38 @@ where
     {
         self.map.retain_with_order(|k, _| f(k));
     }
+
+    /// Returns iterator that was skipped to a specific key entry, or None.
+    /// It does not implement `ExactSizeIterator` because
+    /// it is unclear where exactly the iterator is.
+    ///
+    /// It is useful when iterating over a subset of
+    /// all items in order, e.g. for starting a queue iteration at a specific key
+    ///
+    /// # Examples
+    ///
+    /// ```rs
+    /// let mut map = LinkedHashSet::new();
+    ///
+    /// map.insert("a");
+    /// map.insert("b");
+    /// map.insert("c");
+    ///
+    /// assert_eq!(map.iter_at_key(&"e").is_none(), true);
+    ///
+    /// // regular iter
+    /// let mut iter = map.iter_at_key(&"b").unwrap();
+    /// assert_eq!(&"b", iter.next().unwrap());
+    /// assert_eq!(&"c", iter.next().unwrap());
+    /// assert_eq!(None, iter.next());
+    /// assert_eq!(None, iter.next());
+    /// ```
+    ///
+    #[inline]
+    pub fn iter_at_key(&self, k: &T) -> Option<IterAtKey<'_, T>> {
+        let iter = self.map.iter_at_key(k)?;
+        Some(IterAtKey { iter })
+    }
 }
 
 impl<T: Hash + Eq + Clone, S: BuildHasher + Clone> Clone for LinkedHashSet<T, S> {
@@ -467,6 +499,10 @@ pub struct Drain<'a, K: 'a> {
     iter: linked_hash_map::Drain<'a, K, ()>,
 }
 
+pub struct IterAtKey<'a, K> {
+    iter: linked_hash_map::IterAtKey<'a, K, ()>,
+}
+
 pub struct Intersection<'a, T, S> {
     iter: Iter<'a, T>,
     other: &'a LinkedHashSet<T, S>,
@@ -598,6 +634,38 @@ impl<'a, T, S> Clone for Intersection<'a, T, S> {
             iter: self.iter.clone(),
             ..*self
         }
+    }
+}
+
+impl<'a, K> Clone for IterAtKey<'a, K> {
+    #[inline]
+    fn clone(&self) -> IterAtKey<'a, K> {
+        IterAtKey {
+            iter: self.iter.clone(),
+        }
+    }
+}
+
+impl<'a, K> Iterator for IterAtKey<'a, K> {
+    type Item = &'a K;
+
+    #[inline]
+    fn next(&mut self) -> Option<&'a K> {
+        Some(self.iter.next()?.0)
+    }
+}
+
+impl<'a, K> DoubleEndedIterator for IterAtKey<'a, K> {
+    #[inline]
+    fn next_back(&mut self) -> Option<&'a K> {
+        Some(self.iter.next_back()?.0)
+    }
+}
+
+impl<'a, K: fmt::Debug> fmt::Debug for IterAtKey<'a, K> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.clone()).finish()
     }
 }
 
