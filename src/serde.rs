@@ -5,12 +5,12 @@ use core::{
 };
 
 use serde::{
-    de::{MapAccess, SeqAccess, Visitor},
-    ser::{SerializeMap, SerializeSeq},
+    de::{self, MapAccess, SeqAccess, Visitor},
+    ser::{SerializeMap, SerializeSeq, SerializeStruct},
     Deserialize, Deserializer, Serialize, Serializer,
 };
 
-use crate::{LinkedHashMap, LinkedHashSet};
+use crate::{LinkedHashMap, LinkedHashSet, LruCache};
 
 // LinkedHashMap impls
 
@@ -157,5 +157,156 @@ where
         }
 
         deserializer.deserialize_seq(LinkedHashSetVisitor::default())
+    }
+}
+
+// LruCache impls
+
+impl<K, V, S> Serialize for LruCache<K, V, S>
+where
+    K: Serialize + Eq + Hash,
+    V: Serialize,
+    S: BuildHasher + Default,
+{
+    #[inline]
+    fn serialize<T: Serializer>(&self, serializer: T) -> Result<T::Ok, T::Error> {
+        let mut state = serializer.serialize_struct("LruCache", 2)?;
+        state.serialize_field("map", &self.map)?;
+        state.serialize_field("max_size", &self.max_size)?;
+        state.end()
+    }
+}
+
+impl<'de, K, V, S> Deserialize<'de> for LruCache<K, V, S>
+where
+    K: Deserialize<'de> + Eq + Hash,
+    V: Deserialize<'de>,
+    S: BuildHasher + Default,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        enum Field {
+            Map,
+            MaxSize,
+        }
+
+        impl<'de> Deserialize<'de> for Field {
+            fn deserialize<D>(deserializer: D) -> Result<Field, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                struct FieldVisitor;
+
+                impl<'de> Visitor<'de> for FieldVisitor {
+                    type Value = Field;
+
+                    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                        formatter.write_str("`map` or `max_size`")
+                    }
+
+                    fn visit_str<E>(self, value: &str) -> Result<Field, E>
+                    where
+                        E: de::Error,
+                    {
+                        match value {
+                            "map" => Ok(Field::Map),
+                            "max_size" => Ok(Field::MaxSize),
+                            _ => Err(de::Error::unknown_field(value, FIELDS)),
+                        }
+                    }
+                }
+
+                deserializer.deserialize_identifier(FieldVisitor)
+            }
+        }
+
+        #[derive(Debug)]
+        struct LruCacheVisitor<K, V, S>
+        where
+            K: Eq + Hash,
+            S: BuildHasher + Default,
+        {
+            marker: PhantomData<LruCache<K, V, S>>,
+        }
+
+        impl<K, V, S> LruCacheVisitor<K, V, S>
+        where
+            K: Eq + Hash,
+            S: BuildHasher + Default,
+        {
+            fn new() -> Self {
+                LruCacheVisitor {
+                    marker: PhantomData,
+                }
+            }
+        }
+
+        impl<K, V, S> Default for LruCacheVisitor<K, V, S>
+        where
+            K: Eq + Hash,
+            S: BuildHasher + Default,
+        {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+
+        impl<'de, K, V, S> Visitor<'de> for LruCacheVisitor<K, V, S>
+        where
+            K: Deserialize<'de> + Eq + Hash,
+            V: Deserialize<'de>,
+            S: BuildHasher + Default,
+        {
+            type Value = LruCache<K, V, S>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("struct LruCache")
+            }
+
+            fn visit_seq<M>(self, mut outseq: M) -> Result<LruCache<K, V, S>, M::Error>
+            where
+                M: SeqAccess<'de>,
+            {
+                let map = outseq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+                let max_size = outseq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+                Ok(LruCache::<K, V, S> { map, max_size })
+            }
+
+            fn visit_map<M>(self, mut outmap: M) -> Result<LruCache<K, V, S>, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let mut map = None;
+                let mut max_size = None;
+                while let Some(key) = outmap.next_key()? {
+                    match key {
+                        Field::Map => {
+                            if map.is_some() {
+                                return Err(de::Error::duplicate_field("map"));
+                            }
+                            map = Some(outmap.next_value()?);
+                        }
+                        Field::MaxSize => {
+                            if max_size.is_some() {
+                                return Err(de::Error::duplicate_field("max_size"));
+                            }
+                            max_size = Some(outmap.next_value()?);
+                        }
+                    }
+                }
+                let map = map.ok_or_else(|| de::Error::missing_field("map"))?;
+                let max_size = max_size.ok_or_else(|| de::Error::missing_field("max_size"))?;
+                Ok(LruCache::<K, V, S> { map, max_size })
+            }
+        }
+
+        const FIELDS: &'static [&'static str] = &["map", "max_size"];
+        deserializer.deserialize_struct("LruCache", FIELDS, LruCacheVisitor::default())
     }
 }
