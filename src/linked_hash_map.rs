@@ -680,7 +680,7 @@ where
 }
 
 pub enum Entry<'a, K, V, S> {
-    Occupied(OccupiedEntry<'a, K, V>),
+    Occupied(OccupiedEntry<'a, K, V, S>),
     Vacant(VacantEntry<'a, K, V, S>),
 }
 
@@ -755,12 +755,12 @@ impl<'a, K, V, S> Entry<'a, K, V, S> {
     }
 }
 
-pub struct OccupiedEntry<'a, K, V> {
+pub struct OccupiedEntry<'a, K, V, S> {
     key: K,
-    raw_entry: RawOccupiedEntryMut<'a, K, V>,
+    raw_entry: RawOccupiedEntryMut<'a, K, V, S>,
 }
 
-impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for OccupiedEntry<'_, K, V> {
+impl<K: fmt::Debug, V: fmt::Debug, S> fmt::Debug for OccupiedEntry<'_, K, V, S> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("OccupiedEntry")
@@ -770,7 +770,7 @@ impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for OccupiedEntry<'_, K, V> {
     }
 }
 
-impl<'a, K, V> OccupiedEntry<'a, K, V> {
+impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     #[inline]
     pub fn key(&self) -> &K {
         self.raw_entry.key()
@@ -827,6 +827,16 @@ impl<'a, K, V> OccupiedEntry<'a, K, V> {
     pub fn insert_entry(mut self, value: V) -> (K, V) {
         self.raw_entry.to_back();
         self.replace_entry(value)
+    }
+
+    /// Returns a `CursorMut` over the current entry.
+    #[inline]
+    pub fn cursor_mut(self) -> CursorMut<'a, K, V, S>
+    where
+        K: Eq + Hash,
+        S: BuildHasher,
+    {
+        self.raw_entry.cursor_mut()
     }
 
     /// Replaces the entry's key with the key provided to `LinkedHashMap::entry`, and replaces the
@@ -984,6 +994,7 @@ where
 
         match entry {
             Ok(occupied) => RawEntryMut::Occupied(RawOccupiedEntryMut {
+                hash_builder: &self.map.hash_builder,
                 free: &mut self.map.free,
                 values: &mut self.map.values,
                 entry: occupied,
@@ -1015,7 +1026,7 @@ where
 }
 
 pub enum RawEntryMut<'a, K, V, S> {
-    Occupied(RawOccupiedEntryMut<'a, K, V>),
+    Occupied(RawOccupiedEntryMut<'a, K, V, S>),
     Vacant(RawVacantEntryMut<'a, K, V, S>),
 }
 
@@ -1076,13 +1087,14 @@ impl<'a, K, V, S> RawEntryMut<'a, K, V, S> {
     }
 }
 
-pub struct RawOccupiedEntryMut<'a, K, V> {
+pub struct RawOccupiedEntryMut<'a, K, V, S> {
+    hash_builder: &'a S,
     free: &'a mut Option<NonNull<Node<K, V>>>,
     values: &'a mut Option<NonNull<Node<K, V>>>,
     entry: hash_table::OccupiedEntry<'a, NonNull<Node<K, V>>>,
 }
 
-impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
+impl<'a, K, V, S> RawOccupiedEntryMut<'a, K, V, S> {
     #[inline]
     pub fn key(&self) -> &K {
         self.get_key_value().0
@@ -1184,6 +1196,22 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
         let node = self.entry.remove().0;
         unsafe { remove_node(self.free, node) }
     }
+
+    /// Returns a `CursorMut` over the current entry.
+    #[inline]
+    pub fn cursor_mut(self) -> CursorMut<'a, K, V, S>
+    where
+        K: Eq + Hash,
+        S: BuildHasher,
+    {
+        CursorMut {
+            cur: self.entry.get().as_ptr(),
+            hash_builder: self.hash_builder,
+            free: self.free,
+            values: self.values,
+            table: self.entry.into_table(),
+        }
+    }
 }
 
 pub struct RawVacantEntryMut<'a, K, V, S> {
@@ -1260,7 +1288,7 @@ impl<K: fmt::Debug, V: fmt::Debug, S> fmt::Debug for RawEntryMut<'_, K, V, S> {
     }
 }
 
-impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for RawOccupiedEntryMut<'_, K, V> {
+impl<K: fmt::Debug, V: fmt::Debug, S> fmt::Debug for RawOccupiedEntryMut<'_, K, V, S> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RawOccupiedEntryMut")
@@ -1284,17 +1312,19 @@ impl<K, V, S> fmt::Debug for RawEntryBuilder<'_, K, V, S> {
     }
 }
 
-unsafe impl<'a, K, V> Send for RawOccupiedEntryMut<'a, K, V>
+unsafe impl<'a, K, V, S> Send for RawOccupiedEntryMut<'a, K, V, S>
 where
     K: Send,
     V: Send,
+    S: Send,
 {
 }
 
-unsafe impl<'a, K, V> Sync for RawOccupiedEntryMut<'a, K, V>
+unsafe impl<'a, K, V, S> Sync for RawOccupiedEntryMut<'a, K, V, S>
 where
     K: Sync,
     V: Sync,
+    S: Sync,
 {
 }
 
@@ -1342,6 +1372,33 @@ pub struct Drain<'a, K, V> {
     remaining: usize,
     // We want `Drain` to be covariant
     marker: PhantomData<(K, V, &'a LinkedHashMap<K, V>)>,
+}
+
+/// The `CursorMut` struct and its implementation provide the basic mutable Cursor API for Linked
+/// lists as proposed in
+/// [here](https://github.com/rust-lang/rfcs/blob/master/text/2570-linked-list-cursors.md), with
+/// several exceptions:
+///
+/// - It behaves similarly to Rust's Iterators, returning `None` when the end of the list is
+///   reached. A _ghost_ node is positioned between the head and tail of the linked list to
+///   facilitate this. If the cursor is over this ghost node, `None` is returned, signaling the end
+///   or start of the list. From this position, the cursor can move in either direction as the
+///   linked list is circular, with the ghost node connecting the two ends.
+/// - The current implementation does not include an `index` method, as it does not track the index
+///   of its elements. It operates by providing items as key-value tuples, allowing the value to be
+///   modified via a mutable reference while the key could not be changed.
+/// - The current implementation does not include `splice_*`, `split_*`, `as_cursor`, or
+///   `remove_current` methods, as there hasn't been a strong demand for these features in
+///   real-world scenarios. However, they can be readily incorporated into the existing codebase if
+///   needed.
+/// - For added convenience, it includes the `move_at` method.
+///
+pub struct CursorMut<'a, K, V, S> {
+    cur: *mut Node<K, V>,
+    hash_builder: &'a S,
+    free: &'a mut Option<NonNull<Node<K, V>>>,
+    values: &'a mut Option<NonNull<Node<K, V>>>,
+    table: &'a mut hashbrown::HashTable<NonNull<Node<K, V>>>,
 }
 
 impl<K, V> IterMut<'_, K, V> {
@@ -1672,6 +1729,174 @@ impl<'a, K, V> Drop for Drain<'a, K, V> {
                 self.tail = Some(tail.as_ref().links.value.prev);
                 tail.as_mut().take_entry();
                 push_free(&mut *self.free.as_ptr(), tail);
+            }
+        }
+    }
+}
+
+impl<'a, K, V, S> CursorMut<'a, K, V, S> {
+    /// Fetches the current element in the list, provided it is not the _ghost_ node,
+    /// which acts as a devider in the linked list structure indicating the end/front
+    /// of the list. TODO: rephrase.
+    #[inline]
+    pub fn current(&mut self) -> Option<(&K, &mut V)> {
+        unsafe {
+            let at = NonNull::new_unchecked(self.cur);
+            self.peek(|| at)
+        }
+    }
+
+    /// Retrieves the next element in the list (moving towards the end).
+    #[inline]
+    pub fn peek_next(&mut self) -> Option<(&K, &mut V)> {
+        unsafe {
+            let at = (*self.cur).links.value.next;
+            self.peek(|| at)
+        }
+    }
+
+    /// Retrieves the previous element in the list (moving towards the front).
+    #[inline]
+    pub fn peek_prev(&mut self) -> Option<(&K, &mut V)> {
+        unsafe {
+            let at = (*self.cur).links.value.prev;
+            self.peek(|| at)
+        }
+    }
+
+    // Retrieves the element specified by the at closure function without advancing current
+    // position to it.
+    #[inline]
+    fn peek(&mut self, at: impl FnOnce() -> NonNull<Node<K, V>>) -> Option<(&K, &mut V)> {
+        if let Some(values) = self.values {
+            unsafe {
+                let node = at().as_ptr();
+                if node == values.as_ptr() {
+                    None
+                } else {
+                    let entry = (*node).entry_mut();
+                    Some((&entry.0, &mut entry.1))
+                }
+            }
+        } else {
+            unreachable!("underlying doubly-linked list is not initialized")
+        }
+    }
+
+    /// Updates the pointer to the current element to the next element in the
+    /// list (that is, moving towards the end).
+    #[inline]
+    pub fn move_next(&mut self) {
+        let at = unsafe { (*self.cur).links.value.next };
+        self.muv(|| at);
+    }
+
+    /// Updates the pointer to the current element to the previous element in the
+    /// list (that is, moving towards the front).
+    #[inline]
+    pub fn move_prev(&mut self) {
+        let at = unsafe { (*self.cur).links.value.prev };
+        self.muv(|| at);
+    }
+
+    /// Positions the cursor at the element associated with the specified key. Returns `true`
+    /// if the element exists and the operation succeeds, or `false` if the element does not
+    /// exist.
+    #[inline]
+    pub fn move_at(&mut self, key: K) -> bool
+    where
+        K: Eq + Hash,
+        S: BuildHasher,
+    {
+        unsafe {
+            let hash = hash_key(self.hash_builder, &key);
+            let i_entry = self
+                .table
+                .find_entry(hash, |o| (*o).as_ref().key_ref().eq(&key));
+
+            match i_entry {
+                Ok(occupied) => {
+                    let at = *occupied.get();
+                    self.muv(|| at);
+                    true
+                }
+                Err(_) => false,
+            }
+        }
+    }
+
+    // Updates the pointer to the current element to the one returned by the at closure function.
+    #[inline]
+    fn muv(&mut self, at: impl FnOnce() -> NonNull<Node<K, V>>) {
+        self.cur = at().as_ptr();
+    }
+
+    /// Inserts the provided key and value before the current item. It checks if an entry
+    /// with the given key exists and, if so, replaces its value with the provided `1`
+    /// parameter from the given tuple. The key is not updated; this matters for types that
+    /// can be `==` without being identical.
+    ///
+    /// If the entry doesn't exist, it creates a new one. If a value has been updated, the
+    /// function returns the *old* value wrapped with `Some`  and `None` otherwise.
+    #[inline]
+    pub fn insert_before(&mut self, tuple: (K, V)) -> Option<V>
+    where
+        K: Eq + Hash,
+        S: BuildHasher,
+    {
+        let before = unsafe { NonNull::new_unchecked(self.cur) };
+        self.insert(tuple, || before)
+    }
+
+    /// Inserts the provided key and value after the current item. It checks if an entry
+    /// with the given key exists and, if so, replaces its value with the provided `1`
+    /// parameter from the given tuple. The key is not updated; this matters for types that
+    /// can be `==` without being identical.
+    ///
+    /// If the entry doesn't exist, it creates a new one. If a value has been updated, the
+    /// function returns the *old* value wrapped with `Some`  and `None` otherwise.
+    #[inline]
+    pub fn insert_after(&mut self, tuple: (K, V)) -> Option<V>
+    where
+        K: Eq + Hash,
+        S: BuildHasher,
+    {
+        let before = unsafe { (*self.cur).links.value.next };
+        self.insert(tuple, || before)
+    }
+
+    // Inserts `item` immediately before the element returned by the `before` closure function.
+    #[inline]
+    fn insert(&mut self, tuple: (K, V), before: impl FnOnce() -> NonNull<Node<K, V>>) -> Option<V>
+    where
+        K: Eq + Hash,
+        S: BuildHasher,
+    {
+        let (key, value) = tuple;
+        unsafe {
+            let hash = hash_key(self.hash_builder, &key);
+            let i_entry = self
+                .table
+                .find_entry(hash, |o| (*o).as_ref().key_ref().eq(&key));
+
+            match i_entry {
+                Ok(occupied) => {
+                    let mut node = *occupied.into_mut();
+                    let pv = mem::replace(&mut node.as_mut().entry_mut().1, value);
+                    detach_node(node);
+                    attach_before(node, before());
+                    Some(pv)
+                }
+                Err(_) => {
+                    let mut new_node = allocate_node(self.free);
+                    new_node.as_mut().put_entry((key, value));
+                    let hash_builder = self.hash_builder;
+                    self.table.insert_unique(hash, new_node, move |k| {
+                        hash_key(hash_builder, (*k).as_ref().key_ref())
+                    });
+                    attach_before(new_node, before());
+                    None
+                }
             }
         }
     }
