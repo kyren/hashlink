@@ -831,9 +831,10 @@ impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
 
     /// Inserts the provided key and value as an entry before the current `OccupiedEntry`.
     /// It checks if an entry with the given key exists and, if so, replaces its value with the
-    /// provided `value` parameter. If the entry doesn't exist, it creates a new one. If a value
-    /// has been replaced, the function returns the *old* value wrapped with `Some`  and `None`
-    /// otherwise.
+    /// provided `value` parameter. The key is not updated; this matters for types that can
+    /// be `==` without being identical.
+    /// If the entry doesn't exist, it creates a new one. If a value has been replaced, the
+    /// function returns the *old* value wrapped with `Some`  and `None` otherwise.
     pub fn insert_before(self, key: K, value: V) -> Option<V>
     where
         K: Eq + Hash,
@@ -1210,12 +1211,13 @@ impl<'a, K, V, S> RawOccupiedEntryMut<'a, K, V, S> {
             let Self {
                 hash_builder,
                 mut entry,
+                free,
                 ..
             } = self;
             // Get the current node before we lose the reference to the entry via
             // consuming `entry.into_table()` call.
             let b_node = *entry.get_mut();
-            let hash = hash_key(self.hash_builder, &key);
+            let hash = hash_key(hash_builder, &key);
             let i_entry = entry
                 .into_table()
                 .find_entry(hash, |o| (*o).as_ref().key_ref().eq(&key));
@@ -1229,7 +1231,7 @@ impl<'a, K, V, S> RawOccupiedEntryMut<'a, K, V, S> {
                     Some(pv)
                 }
                 Err(absent) => {
-                    let mut new_node = allocate_node(self.free);
+                    let mut new_node = allocate_node(free);
                     new_node.as_mut().put_entry((key, value));
                     let node = *absent
                         .into_table()
