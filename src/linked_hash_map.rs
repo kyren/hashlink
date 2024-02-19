@@ -680,7 +680,7 @@ where
 }
 
 pub enum Entry<'a, K, V, S> {
-    Occupied(OccupiedEntry<'a, K, V>),
+    Occupied(OccupiedEntry<'a, K, V, S>),
     Vacant(VacantEntry<'a, K, V, S>),
 }
 
@@ -755,12 +755,12 @@ impl<'a, K, V, S> Entry<'a, K, V, S> {
     }
 }
 
-pub struct OccupiedEntry<'a, K, V> {
+pub struct OccupiedEntry<'a, K, V, S> {
     key: K,
-    raw_entry: RawOccupiedEntryMut<'a, K, V>,
+    raw_entry: RawOccupiedEntryMut<'a, K, V, S>,
 }
 
-impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for OccupiedEntry<'_, K, V> {
+impl<K: fmt::Debug, V: fmt::Debug, S> fmt::Debug for OccupiedEntry<'_, K, V, S> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("OccupiedEntry")
@@ -770,7 +770,7 @@ impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for OccupiedEntry<'_, K, V> {
     }
 }
 
-impl<'a, K, V> OccupiedEntry<'a, K, V> {
+impl<'a, K, V, S> OccupiedEntry<'a, K, V, S> {
     #[inline]
     pub fn key(&self) -> &K {
         self.raw_entry.key()
@@ -827,6 +827,19 @@ impl<'a, K, V> OccupiedEntry<'a, K, V> {
     pub fn insert_entry(mut self, value: V) -> (K, V) {
         self.raw_entry.to_back();
         self.replace_entry(value)
+    }
+
+    /// Inserts the provided key and value as an entry before the current `OccupiedEntry`.
+    /// It checks if an entry with the given key exists and, if so, replaces its value with the
+    /// provided `value` parameter. If the entry doesn't exist, it creates a new one. If a value
+    /// has been replaced, the function returns the *old* value wrapped with `Some`  and `None`
+    /// otherwise.
+    pub fn insert_before(self, key: K, value: V) -> Option<V>
+    where
+        K: Eq + Hash,
+        S: BuildHasher,
+    {
+        self.raw_entry.insert_before(key, value)
     }
 
     /// Replaces the entry's key with the key provided to `LinkedHashMap::entry`, and replaces the
@@ -984,6 +997,7 @@ where
 
         match entry {
             Ok(occupied) => RawEntryMut::Occupied(RawOccupiedEntryMut {
+                hash_builder: &self.map.hash_builder,
                 free: &mut self.map.free,
                 values: &mut self.map.values,
                 entry: occupied,
@@ -1015,7 +1029,7 @@ where
 }
 
 pub enum RawEntryMut<'a, K, V, S> {
-    Occupied(RawOccupiedEntryMut<'a, K, V>),
+    Occupied(RawOccupiedEntryMut<'a, K, V, S>),
     Vacant(RawVacantEntryMut<'a, K, V, S>),
 }
 
@@ -1076,13 +1090,14 @@ impl<'a, K, V, S> RawEntryMut<'a, K, V, S> {
     }
 }
 
-pub struct RawOccupiedEntryMut<'a, K, V> {
+pub struct RawOccupiedEntryMut<'a, K, V, S> {
+    hash_builder: &'a S,
     free: &'a mut Option<NonNull<Node<K, V>>>,
     values: &'a mut Option<NonNull<Node<K, V>>>,
     entry: hash_table::OccupiedEntry<'a, NonNull<Node<K, V>>>,
 }
 
-impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
+impl<'a, K, V, S> RawOccupiedEntryMut<'a, K, V, S> {
     #[inline]
     pub fn key(&self) -> &K {
         self.get_key_value().0
@@ -1184,6 +1199,50 @@ impl<'a, K, V> RawOccupiedEntryMut<'a, K, V> {
         let node = self.entry.remove().0;
         unsafe { remove_node(self.free, node) }
     }
+
+    fn insert_before(self, key: K, value: V) -> Option<V>
+    where
+        K: Eq + Hash,
+        S: BuildHasher,
+    {
+        unsafe {
+            // Destruct the `self` object into separate fields for independent consumption.
+            let Self {
+                hash_builder,
+                mut entry,
+                ..
+            } = self;
+            // Get the current node before we lose the reference to the entry via
+            // consuming `entry.into_table()` call.
+            let b_node = *entry.get_mut();
+            let hash = hash_key(self.hash_builder, &key);
+            let i_entry = entry
+                .into_table()
+                .find_entry(hash, |o| (*o).as_ref().key_ref().eq(&key));
+
+            match i_entry {
+                Ok(occupied) => {
+                    let mut node = *occupied.into_mut();
+                    let pv = mem::replace(&mut node.as_mut().entry_mut().1, value);
+                    detach_node(node);
+                    attach_before(node, b_node);
+                    Some(pv)
+                }
+                Err(absent) => {
+                    let mut new_node = allocate_node(self.free);
+                    new_node.as_mut().put_entry((key, value));
+                    let node = *absent
+                        .into_table()
+                        .insert_unique(hash, new_node, move |k| {
+                            hash_key(hash_builder, (*k).as_ref().key_ref())
+                        })
+                        .get();
+                    attach_before(node, b_node);
+                    None
+                }
+            }
+        }
+    }
 }
 
 pub struct RawVacantEntryMut<'a, K, V, S> {
@@ -1260,7 +1319,7 @@ impl<K: fmt::Debug, V: fmt::Debug, S> fmt::Debug for RawEntryMut<'_, K, V, S> {
     }
 }
 
-impl<K: fmt::Debug, V: fmt::Debug> fmt::Debug for RawOccupiedEntryMut<'_, K, V> {
+impl<K: fmt::Debug, V: fmt::Debug, S> fmt::Debug for RawOccupiedEntryMut<'_, K, V, S> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RawOccupiedEntryMut")
@@ -1284,17 +1343,19 @@ impl<K, V, S> fmt::Debug for RawEntryBuilder<'_, K, V, S> {
     }
 }
 
-unsafe impl<'a, K, V> Send for RawOccupiedEntryMut<'a, K, V>
+unsafe impl<'a, K, V, S> Send for RawOccupiedEntryMut<'a, K, V, S>
 where
     K: Send,
     V: Send,
+    S: Send,
 {
 }
 
-unsafe impl<'a, K, V> Sync for RawOccupiedEntryMut<'a, K, V>
+unsafe impl<'a, K, V, S> Sync for RawOccupiedEntryMut<'a, K, V, S>
 where
     K: Sync,
     V: Sync,
+    S: Sync,
 {
 }
 
