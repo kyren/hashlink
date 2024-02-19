@@ -575,3 +575,32 @@ fn test_shrink_to_fit_resize() {
         assert_eq!(map.get(&i).unwrap(), &i);
     }
 }
+
+#[test]
+fn test_insert_before() {
+    let mut map = LinkedHashMap::new();
+
+    map.insert(1, 1);
+    map.insert(2, 2);
+    map.insert(3, 3);
+    map.insert(4, 4);
+
+    // Insert-before a new key/value pair into the map, i.e. the key does not exist.
+    if let linked_hash_map::Entry::Occupied(entry) = map.entry(3) {
+        let pv = entry.insert_before(5, 5);
+        assert!(pv.is_none());
+    }
+
+    // Insert-before an existing key with updated value, relocate the key in the underlying
+    // linked-list as requested.
+    if let linked_hash_map::Entry::Occupied(entry) = map.entry(1) {
+        let pv = entry.insert_before(2, 6);
+        assert!(pv.is_some());
+        assert_eq!(pv.unwrap(), 2);
+    }
+
+    assert!(map
+        .iter()
+        .map(|(k, v)| (*k, *v))
+        .eq([(2, 6), (1, 1), (5, 5), (3, 3), (4, 4)].iter().copied()));
+}
