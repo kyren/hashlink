@@ -1238,7 +1238,7 @@ impl<'a, K, V, S> RawOccupiedEntryMut<'a, K, V, S> {
                         .insert_unique(hash, new_node, move |k| {
                             hash_key(hash_builder, (*k).as_ref().key_ref())
                         })
-                        .get();
+                        .into_mut();
                     attach_before(node, b_node);
                     None
                 }
