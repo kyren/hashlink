@@ -780,3 +780,25 @@ fn test_cursor_mut_insert_after() {
             .eq([(6, 6), (3, 3), (5, 5), (4, 4)].iter().copied()));
     }
 }
+
+#[test]
+fn test_cursor_mut() {
+    let mut map: LinkedHashMap<i32, i32> = LinkedHashMap::new();
+    // CursorMut over the _guard_ node in an empty LinkedHashMap will always return `None` as its
+    // current eliment, regardless of any move in any direction.
+    let mut cursor = map.cursor_mut();
+    assert!(cursor.current().is_none());
+    cursor.move_next();
+    assert!(cursor.current().is_none());
+    cursor.insert_after((1, 1));
+    cursor.move_next();
+    assert!(cursor.current().is_some());
+    assert_eq!(cursor.current().unwrap().1, &mut 1);
+    cursor.move_next();
+    assert!(cursor.current().is_none());
+
+    assert!(map
+        .iter()
+        .map(|(k, v)| (*k, *v))
+        .eq([(1, 1)].iter().copied()));
+}

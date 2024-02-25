@@ -503,6 +503,21 @@ where
             }
         }
     }
+
+    /// Returns the `CursorMut` over the _guard_ node.
+    ///
+    /// Note: The `CursorMut` over the _guard_ node in an empty `LinkedHashMap` will always
+    ///       return `None` as its current eliment, regardless of any move in any direction.
+    pub fn cursor_mut(&mut self) -> CursorMut<K, V, S> {
+        unsafe { ensure_guard_node(&mut self.values) };
+        CursorMut {
+            cur: self.values.as_ptr(),
+            hash_builder: &self.hash_builder,
+            free: &mut self.free,
+            values: &mut self.values,
+            table: &mut self.table,
+        }
+    }
 }
 
 impl<K, V, S> LinkedHashMap<K, V, S>
@@ -1380,10 +1395,10 @@ pub struct Drain<'a, K, V> {
 /// several exceptions:
 ///
 /// - It behaves similarly to Rust's Iterators, returning `None` when the end of the list is
-///   reached. A _ghost_ node is positioned between the head and tail of the linked list to
-///   facilitate this. If the cursor is over this ghost node, `None` is returned, signaling the end
+///   reached. A _guard_ node is positioned between the head and tail of the linked list to
+///   facilitate this. If the cursor is over this guard node, `None` is returned, signaling the end
 ///   or start of the list. From this position, the cursor can move in either direction as the
-///   linked list is circular, with the ghost node connecting the two ends.
+///   linked list is circular, with the guard node connecting the two ends.
 /// - The current implementation does not include an `index` method, as it does not track the index
 ///   of its elements. It operates by providing items as key-value tuples, allowing the value to be
 ///   modified via a mutable reference while the key could not be changed.
@@ -1735,9 +1750,8 @@ impl<'a, K, V> Drop for Drain<'a, K, V> {
 }
 
 impl<'a, K, V, S> CursorMut<'a, K, V, S> {
-    /// Fetches the current element in the list, provided it is not the _ghost_ node,
-    /// which acts as a devider in the linked list structure indicating the end/front
-    /// of the list. TODO: rephrase.
+    /// Returns an `Option` of the current element in the list, provided it is not the
+    /// _guard_ node, and `None` overwise.
     #[inline]
     pub fn current(&mut self) -> Option<(&K, &mut V)> {
         unsafe {
