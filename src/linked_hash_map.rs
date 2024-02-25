@@ -1793,7 +1793,7 @@ impl<'a, K, V, S> CursorMut<'a, K, V, S> {
                 }
             }
         } else {
-            unreachable!("underlying doubly-linked list is not initialized")
+            None
         }
     }
 
