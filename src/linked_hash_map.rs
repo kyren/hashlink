@@ -1817,16 +1817,16 @@ impl<'a, K, V, S> CursorMut<'a, K, V, S> {
     /// if the element exists and the operation succeeds, or `false` if the element does not
     /// exist.
     #[inline]
-    pub fn move_at(&mut self, key: K) -> bool
+    pub fn move_at(&mut self, key: &K) -> bool
     where
         K: Eq + Hash,
         S: BuildHasher,
     {
         unsafe {
-            let hash = hash_key(self.hash_builder, &key);
+            let hash = hash_key(self.hash_builder, key);
             let i_entry = self
                 .table
-                .find_entry(hash, |o| (*o).as_ref().key_ref().eq(&key));
+                .find_entry(hash, |o| (*o).as_ref().key_ref().eq(key));
 
             match i_entry {
                 Ok(occupied) => {

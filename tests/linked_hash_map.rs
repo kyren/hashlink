@@ -661,12 +661,12 @@ fn test_cursor_mut_move_at() {
 
     if let linked_hash_map::Entry::Occupied(entry) = map.entry(3) {
         let mut cursor = entry.cursor_mut();
-        let moved = cursor.move_at(6);
+        let moved = cursor.move_at(&6);
         assert!(moved);
         let value = cursor.current();
         assert!(value.is_some());
         assert_eq!(value.unwrap().1, &mut 6);
-        let moved = cursor.move_at(7);
+        let moved = cursor.move_at(&7);
         assert!(!moved);
     }
 }
