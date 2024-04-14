@@ -1813,32 +1813,6 @@ impl<'a, K, V, S> CursorMut<'a, K, V, S> {
         self.muv(|| at);
     }
 
-    /// Positions the cursor at the element associated with the specified key. Returns `true`
-    /// if the element exists and the operation succeeds, or `false` if the element does not
-    /// exist.
-    #[inline]
-    pub fn move_at(&mut self, key: &K) -> bool
-    where
-        K: Eq + Hash,
-        S: BuildHasher,
-    {
-        unsafe {
-            let hash = hash_key(self.hash_builder, key);
-            let i_entry = self
-                .table
-                .find_entry(hash, |o| (*o).as_ref().key_ref().eq(key));
-
-            match i_entry {
-                Ok(occupied) => {
-                    let at = *occupied.get();
-                    self.muv(|| at);
-                    true
-                }
-                Err(_) => false,
-            }
-        }
-    }
-
     // Updates the pointer to the current element to the one returned by the at closure function.
     #[inline]
     fn muv(&mut self, at: impl FnOnce() -> NonNull<Node<K, V>>) {

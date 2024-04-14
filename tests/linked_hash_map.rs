@@ -651,27 +651,6 @@ fn test_cursor_mut_move_prev() {
 }
 
 #[test]
-fn test_cursor_mut_move_at() {
-    let mut map = LinkedHashMap::new();
-
-    map.insert(3, 3);
-    map.insert(4, 4);
-    map.insert(5, 5);
-    map.insert(6, 6);
-
-    if let linked_hash_map::Entry::Occupied(entry) = map.entry(3) {
-        let mut cursor = entry.cursor_mut();
-        let moved = cursor.move_at(&6);
-        assert!(moved);
-        let value = cursor.current();
-        assert!(value.is_some());
-        assert_eq!(value.unwrap().1, &mut 6);
-        let moved = cursor.move_at(&7);
-        assert!(!moved);
-    }
-}
-
-#[test]
 fn test_cursor_mut_pick_next() {
     let mut map = LinkedHashMap::new();
 
