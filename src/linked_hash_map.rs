@@ -1898,11 +1898,11 @@ impl<'a, K, V, S> CursorMut<'a, K, V, S> {
                 Err(_) => {
                     let mut new_node = allocate_node(self.free);
                     new_node.as_mut().put_entry((key, value));
+                    attach_before(new_node, before());
                     let hash_builder = self.hash_builder;
                     self.table.insert_unique(hash, new_node, move |k| {
                         hash_key(hash_builder, (*k).as_ref().key_ref())
                     });
-                    attach_before(new_node, before());
                     None
                 }
             }
