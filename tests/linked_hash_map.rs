@@ -761,6 +761,27 @@ fn test_cursor_mut_insert_after() {
 }
 
 #[test]
+fn test_cursor_mut_insert_before_itself() {
+    let mut map = LinkedHashMap::new();
+
+    map.insert(2, 2);
+    map.insert(3, 3);
+    map.insert(4, 4);
+
+    // Insert a new value before its key. This is a corner case that needs to be
+    // handled explicitly.
+    if let linked_hash_map::Entry::Occupied(entry) = map.entry(3) {
+        entry.cursor_mut().insert_before(3, 5);
+        let r = map.iter().map(|(k, v)| (*k, *v)).collect::<Vec<_>>();
+        println!("{r:?}");
+        assert!(map
+            .iter()
+            .map(|(k, v)| (*k, *v))
+            .eq([(2, 2), (3, 5), (4, 4)].iter().copied()));
+    }
+}
+
+#[test]
 fn test_cursor_front_mut() {
     let mut map: LinkedHashMap<i32, i32> = LinkedHashMap::new();
     // The `CursorMut`` in an empty LinkedHashMap will always return `None` as its

@@ -1885,8 +1885,10 @@ impl<'a, K, V, S> CursorMut<'a, K, V, S> {
                 Ok(occupied) => {
                     let mut node = *occupied.into_mut();
                     let pv = mem::replace(&mut node.as_mut().entry_mut().1, value);
-                    detach_node(node);
-                    attach_before(node, before);
+                    if node != before {
+                        detach_node(node);
+                        attach_before(node, before);
+                    }
                     Some(pv)
                 }
                 Err(_) => {
