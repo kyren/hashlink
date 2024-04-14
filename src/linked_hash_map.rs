@@ -504,19 +504,40 @@ where
         }
     }
 
-    /// Returns the `CursorMut` over the _guard_ node.
+    /// Returns the `CursorMut` over the front node.
     ///
-    /// Note: The `CursorMut` over the _guard_ node in an empty `LinkedHashMap` will always
-    ///       return `None` as its current eliment, regardless of any move in any direction.
-    pub fn cursor_mut(&mut self) -> CursorMut<K, V, S> {
+    /// Note: The `CursorMut` is pointing to the _guard_ node in an empty `LinkedHashMap` and
+    ///       will always return `None` as its current element, regardless of any move in any
+    ///       direction.
+    pub fn cursor_front_mut(&mut self) -> CursorMut<K, V, S> {
         unsafe { ensure_guard_node(&mut self.values) };
-        CursorMut {
+        let mut c = CursorMut {
             cur: self.values.as_ptr(),
             hash_builder: &self.hash_builder,
             free: &mut self.free,
             values: &mut self.values,
             table: &mut self.table,
-        }
+        };
+        c.move_next();
+        c
+    }
+
+    /// Returns the `CursorMut` over the back node.
+    ///
+    /// Note: The `CursorMut` is pointing to the _guard_ node in an empty `LinkedHashMap` and
+    ///       will always return `None` as its current element, regardless of any move in any
+    ///       direction.
+    pub fn cursor_back_mut(&mut self) -> CursorMut<K, V, S> {
+        unsafe { ensure_guard_node(&mut self.values) };
+        let mut c = CursorMut {
+            cur: self.values.as_ptr(),
+            hash_builder: &self.hash_builder,
+            free: &mut self.free,
+            values: &mut self.values,
+            table: &mut self.table,
+        };
+        c.move_prev();
+        c
     }
 }
 
