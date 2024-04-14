@@ -1421,7 +1421,7 @@ pub struct Drain<'a, K, V> {
 ///   or start of the list. From this position, the cursor can move in either direction as the
 ///   linked list is circular, with the guard node connecting the two ends.
 /// - The current implementation does not include an `index` method, as it does not track the index
-///   of its elements. It operates by providing items as key-value tuples, allowing the value to be
+///   of its elements. It operates by providing elements as key-value tuples, allowing the value to be
 ///   modified via a mutable reference while the key could not be changed.
 ///
 pub struct CursorMut<'a, K, V, S> {
@@ -1772,7 +1772,7 @@ impl<'a, K, V, S> CursorMut<'a, K, V, S> {
     pub fn current(&mut self) -> Option<(&K, &mut V)> {
         unsafe {
             let at = NonNull::new_unchecked(self.cur);
-            self.peek(|| at)
+            self.peek(at)
         }
     }
 
@@ -1781,7 +1781,7 @@ impl<'a, K, V, S> CursorMut<'a, K, V, S> {
     pub fn peek_next(&mut self) -> Option<(&K, &mut V)> {
         unsafe {
             let at = (*self.cur).links.value.next;
-            self.peek(|| at)
+            self.peek(at)
         }
     }
 
@@ -1790,17 +1790,16 @@ impl<'a, K, V, S> CursorMut<'a, K, V, S> {
     pub fn peek_prev(&mut self) -> Option<(&K, &mut V)> {
         unsafe {
             let at = (*self.cur).links.value.prev;
-            self.peek(|| at)
+            self.peek(at)
         }
     }
 
-    // Retrieves the element specified by the at closure function without advancing current
-    // position to it.
+    // Retrieves the element without advancing current position to it.
     #[inline]
-    fn peek(&mut self, at: impl FnOnce() -> NonNull<Node<K, V>>) -> Option<(&K, &mut V)> {
+    fn peek(&mut self, at: NonNull<Node<K, V>>) -> Option<(&K, &mut V)> {
         if let Some(values) = self.values {
             unsafe {
-                let node = at().as_ptr();
+                let node = at.as_ptr();
                 if node == values.as_ptr() {
                     None
                 } else {
@@ -1818,7 +1817,7 @@ impl<'a, K, V, S> CursorMut<'a, K, V, S> {
     #[inline]
     pub fn move_next(&mut self) {
         let at = unsafe { (*self.cur).links.value.next };
-        self.muv(|| at);
+        self.muv(at);
     }
 
     /// Updates the pointer to the current element to the previous element in the
@@ -1826,19 +1825,19 @@ impl<'a, K, V, S> CursorMut<'a, K, V, S> {
     #[inline]
     pub fn move_prev(&mut self) {
         let at = unsafe { (*self.cur).links.value.prev };
-        self.muv(|| at);
+        self.muv(at);
     }
 
     // Updates the pointer to the current element to the one returned by the at closure function.
     #[inline]
-    fn muv(&mut self, at: impl FnOnce() -> NonNull<Node<K, V>>) {
-        self.cur = at().as_ptr();
+    fn muv(&mut self, at: NonNull<Node<K, V>>) {
+        self.cur = at.as_ptr();
     }
 
-    /// Inserts the provided key and value before the current item. It checks if an entry
-    /// with the given key exists and, if so, replaces its value with the provided `1`
-    /// parameter from the given tuple. The key is not updated; this matters for types that
-    /// can be `==` without being identical.
+    /// Inserts the provided key and value before the current element. It checks if an entry
+    /// with the given key exists and, if so, replaces its value with the provided `key`
+    /// parameter. The key is not updated; this matters for types that can be `==` without
+    /// being identical.
     ///
     /// If the entry doesn't exist, it creates a new one. If a value has been updated, the
     /// function returns the *old* value wrapped with `Some`  and `None` otherwise.
@@ -1849,13 +1848,13 @@ impl<'a, K, V, S> CursorMut<'a, K, V, S> {
         S: BuildHasher,
     {
         let before = unsafe { NonNull::new_unchecked(self.cur) };
-        self.insert(key, value, || before)
+        self.insert(key, value, before)
     }
 
-    /// Inserts the provided key and value after the current item. It checks if an entry
-    /// with the given key exists and, if so, replaces its value with the provided `1`
-    /// parameter from the given tuple. The key is not updated; this matters for types that
-    /// can be `==` without being identical.
+    /// Inserts the provided key and value after the current element. It checks if an entry
+    /// with the given key exists and, if so, replaces its value with the provided `key`
+    /// parameter. The key is not updated; this matters for types that can be `==` without
+    /// being identical.
     ///
     /// If the entry doesn't exist, it creates a new one. If a value has been updated, the
     /// function returns the *old* value wrapped with `Some`  and `None` otherwise.
@@ -1866,17 +1865,12 @@ impl<'a, K, V, S> CursorMut<'a, K, V, S> {
         S: BuildHasher,
     {
         let before = unsafe { (*self.cur).links.value.next };
-        self.insert(key, value, || before)
+        self.insert(key, value, before)
     }
 
-    // Inserts `item` immediately before the element returned by the `before` closure function.
+    // Inserts an element immediately before the given `before` node.
     #[inline]
-    fn insert(
-        &mut self,
-        key: K,
-        value: V,
-        before: impl FnOnce() -> NonNull<Node<K, V>>,
-    ) -> Option<V>
+    fn insert(&mut self, key: K, value: V, before: NonNull<Node<K, V>>) -> Option<V>
     where
         K: Eq + Hash,
         S: BuildHasher,
@@ -1892,13 +1886,13 @@ impl<'a, K, V, S> CursorMut<'a, K, V, S> {
                     let mut node = *occupied.into_mut();
                     let pv = mem::replace(&mut node.as_mut().entry_mut().1, value);
                     detach_node(node);
-                    attach_before(node, before());
+                    attach_before(node, before);
                     Some(pv)
                 }
                 Err(_) => {
                     let mut new_node = allocate_node(self.free);
                     new_node.as_mut().put_entry((key, value));
-                    attach_before(new_node, before());
+                    attach_before(new_node, before);
                     let hash_builder = self.hash_builder;
                     self.table.insert_unique(hash, new_node, move |k| {
                         hash_key(hash_builder, (*k).as_ref().key_ref())

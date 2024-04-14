@@ -702,7 +702,7 @@ fn test_cursor_mut_insert_before() {
     map.insert(3, 3);
     map.insert(4, 4);
 
-    // Insert new item in the middle
+    // Insert new element in the middle
     if let linked_hash_map::Entry::Occupied(entry) = map.entry(4) {
         entry.cursor_mut().insert_before(5, 5);
         assert!(map
@@ -711,7 +711,7 @@ fn test_cursor_mut_insert_before() {
             .eq([(3, 3), (5, 5), (4, 4)].iter().copied()));
     }
 
-    // Insert new item at the very end of the list
+    // Insert new element at the very end of the list
     if let linked_hash_map::Entry::Occupied(entry) = map.entry(3) {
         let mut cursor = entry.cursor_mut();
         cursor.move_prev();
@@ -722,7 +722,7 @@ fn test_cursor_mut_insert_before() {
             .eq([(3, 3), (5, 5), (4, 4), (6, 6)].iter().copied()));
     }
 
-    // Relocate item and override value
+    // Relocate element and override value
     if let linked_hash_map::Entry::Occupied(entry) = map.entry(5) {
         entry.cursor_mut().insert_before(4, 42);
         assert!(map
@@ -739,7 +739,7 @@ fn test_cursor_mut_insert_after() {
     map.insert(3, 3);
     map.insert(4, 4);
 
-    // Insert new item in the middle.
+    // Insert new element in the middle.
     if let linked_hash_map::Entry::Occupied(entry) = map.entry(3) {
         entry.cursor_mut().insert_after(5, 5);
         assert!(map
@@ -748,7 +748,7 @@ fn test_cursor_mut_insert_after() {
             .eq([(3, 3), (5, 5), (4, 4)].iter().copied()));
     }
 
-    // Insert new item as the first one.
+    // Insert new element as the first one.
     if let linked_hash_map::Entry::Occupied(entry) = map.entry(4) {
         let mut cursor = entry.cursor_mut();
         cursor.move_next();
@@ -763,7 +763,7 @@ fn test_cursor_mut_insert_after() {
 #[test]
 fn test_cursor_front_mut() {
     let mut map: LinkedHashMap<i32, i32> = LinkedHashMap::new();
-    // the CursorMut in an empty LinkedHashMap will always return `None` as its
+    // The `CursorMut`` in an empty LinkedHashMap will always return `None` as its
     // current element, regardless of any move in any direction.
     let mut cursor = map.cursor_front_mut();
     assert!(cursor.current().is_none());
