@@ -1843,13 +1843,13 @@ impl<'a, K, V, S> CursorMut<'a, K, V, S> {
     /// If the entry doesn't exist, it creates a new one. If a value has been updated, the
     /// function returns the *old* value wrapped with `Some`  and `None` otherwise.
     #[inline]
-    pub fn insert_before(&mut self, tuple: (K, V)) -> Option<V>
+    pub fn insert_before(&mut self, key: K, value: V) -> Option<V>
     where
         K: Eq + Hash,
         S: BuildHasher,
     {
         let before = unsafe { NonNull::new_unchecked(self.cur) };
-        self.insert(tuple, || before)
+        self.insert(key, value, || before)
     }
 
     /// Inserts the provided key and value after the current item. It checks if an entry
@@ -1860,23 +1860,27 @@ impl<'a, K, V, S> CursorMut<'a, K, V, S> {
     /// If the entry doesn't exist, it creates a new one. If a value has been updated, the
     /// function returns the *old* value wrapped with `Some`  and `None` otherwise.
     #[inline]
-    pub fn insert_after(&mut self, tuple: (K, V)) -> Option<V>
+    pub fn insert_after(&mut self, key: K, value: V) -> Option<V>
     where
         K: Eq + Hash,
         S: BuildHasher,
     {
         let before = unsafe { (*self.cur).links.value.next };
-        self.insert(tuple, || before)
+        self.insert(key, value, || before)
     }
 
     // Inserts `item` immediately before the element returned by the `before` closure function.
     #[inline]
-    fn insert(&mut self, tuple: (K, V), before: impl FnOnce() -> NonNull<Node<K, V>>) -> Option<V>
+    fn insert(
+        &mut self,
+        key: K,
+        value: V,
+        before: impl FnOnce() -> NonNull<Node<K, V>>,
+    ) -> Option<V>
     where
         K: Eq + Hash,
         S: BuildHasher,
     {
-        let (key, value) = tuple;
         unsafe {
             let hash = hash_key(self.hash_builder, &key);
             let i_entry = self

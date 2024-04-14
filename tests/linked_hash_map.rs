@@ -704,7 +704,7 @@ fn test_cursor_mut_insert_before() {
 
     // Insert new item in the middle
     if let linked_hash_map::Entry::Occupied(entry) = map.entry(4) {
-        entry.cursor_mut().insert_before((5, 5));
+        entry.cursor_mut().insert_before(5, 5);
         assert!(map
             .iter()
             .map(|(k, v)| (*k, *v))
@@ -715,7 +715,7 @@ fn test_cursor_mut_insert_before() {
     if let linked_hash_map::Entry::Occupied(entry) = map.entry(3) {
         let mut cursor = entry.cursor_mut();
         cursor.move_prev();
-        cursor.insert_before((6, 6));
+        cursor.insert_before(6, 6);
         assert!(map
             .iter()
             .map(|(k, v)| (*k, *v))
@@ -724,7 +724,7 @@ fn test_cursor_mut_insert_before() {
 
     // Relocate item and override value
     if let linked_hash_map::Entry::Occupied(entry) = map.entry(5) {
-        entry.cursor_mut().insert_before((4, 42));
+        entry.cursor_mut().insert_before(4, 42);
         assert!(map
             .iter()
             .map(|(k, v)| (*k, *v))
@@ -741,7 +741,7 @@ fn test_cursor_mut_insert_after() {
 
     // Insert new item in the middle.
     if let linked_hash_map::Entry::Occupied(entry) = map.entry(3) {
-        entry.cursor_mut().insert_after((5, 5));
+        entry.cursor_mut().insert_after(5, 5);
         assert!(map
             .iter()
             .map(|(k, v)| (*k, *v))
@@ -752,7 +752,7 @@ fn test_cursor_mut_insert_after() {
     if let linked_hash_map::Entry::Occupied(entry) = map.entry(4) {
         let mut cursor = entry.cursor_mut();
         cursor.move_next();
-        cursor.insert_after((6, 6));
+        cursor.insert_after(6, 6);
         assert!(map
             .iter()
             .map(|(k, v)| (*k, *v))
@@ -769,7 +769,7 @@ fn test_cursor_front_mut() {
     assert!(cursor.current().is_none());
     cursor.move_next();
     assert!(cursor.current().is_none());
-    cursor.insert_after((1, 1));
+    cursor.insert_after(1, 1);
     cursor.move_next();
     assert!(cursor.current().is_some());
     assert_eq!(cursor.current().unwrap().1, &mut 1);
