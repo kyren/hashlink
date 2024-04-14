@@ -1423,11 +1423,6 @@ pub struct Drain<'a, K, V> {
 /// - The current implementation does not include an `index` method, as it does not track the index
 ///   of its elements. It operates by providing items as key-value tuples, allowing the value to be
 ///   modified via a mutable reference while the key could not be changed.
-/// - The current implementation does not include `splice_*`, `split_*`, `as_cursor`, or
-///   `remove_current` methods, as there hasn't been a strong demand for these features in
-///   real-world scenarios. However, they can be readily incorporated into the existing codebase if
-///   needed.
-/// - For added convenience, it includes the `move_at` method.
 ///
 pub struct CursorMut<'a, K, V, S> {
     cur: *mut Node<K, V>,
