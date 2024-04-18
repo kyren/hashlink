@@ -504,20 +504,25 @@ where
         }
     }
 
+    // Returns the `CursorMut` over the _guard_ node.
+    fn cursor_mut(&mut self) -> CursorMut<K, V, S> {
+        unsafe { ensure_guard_node(&mut self.values) };
+        CursorMut {
+            cur: self.values.as_ptr(),
+            hash_builder: &self.hash_builder,
+            free: &mut self.free,
+            values: &mut self.values,
+            table: &mut self.table,
+        }
+    }
+
     /// Returns the `CursorMut` over the front node.
     ///
     /// Note: The `CursorMut` is pointing to the _guard_ node in an empty `LinkedHashMap` and
     ///       will always return `None` as its current element, regardless of any move in any
     ///       direction.
     pub fn cursor_front_mut(&mut self) -> CursorMut<K, V, S> {
-        unsafe { ensure_guard_node(&mut self.values) };
-        let mut c = CursorMut {
-            cur: self.values.as_ptr(),
-            hash_builder: &self.hash_builder,
-            free: &mut self.free,
-            values: &mut self.values,
-            table: &mut self.table,
-        };
+        let mut c = self.cursor_mut();
         c.move_next();
         c
     }
@@ -528,14 +533,7 @@ where
     ///       will always return `None` as its current element, regardless of any move in any
     ///       direction.
     pub fn cursor_back_mut(&mut self) -> CursorMut<K, V, S> {
-        unsafe { ensure_guard_node(&mut self.values) };
-        let mut c = CursorMut {
-            cur: self.values.as_ptr(),
-            hash_builder: &self.hash_builder,
-            free: &mut self.free,
-            values: &mut self.values,
-            table: &mut self.table,
-        };
+        let mut c = self.cursor_mut();
         c.move_prev();
         c
     }
@@ -1421,8 +1419,7 @@ pub struct Drain<'a, K, V> {
 ///   or start of the list. From this position, the cursor can move in either direction as the
 ///   linked list is circular, with the guard node connecting the two ends.
 /// - The current implementation does not include an `index` method, as it does not track the index
-///   of its elements. It operates by providing elements as key-value tuples, allowing the value to be
-///   modified via a mutable reference while the key could not be changed.
+///   of its elements. It provides access to each map entry as a tuple of `(&K, &mut V)`.
 ///
 pub struct CursorMut<'a, K, V, S> {
     cur: *mut Node<K, V>,

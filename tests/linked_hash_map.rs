@@ -772,8 +772,6 @@ fn test_cursor_mut_insert_before_itself() {
     // handled explicitly.
     if let linked_hash_map::Entry::Occupied(entry) = map.entry(3) {
         entry.cursor_mut().insert_before(3, 5);
-        let r = map.iter().map(|(k, v)| (*k, *v)).collect::<Vec<_>>();
-        println!("{r:?}");
         assert!(map
             .iter()
             .map(|(k, v)| (*k, *v))
