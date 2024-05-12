@@ -1408,27 +1408,6 @@ pub struct Drain<'a, K, V> {
     marker: PhantomData<(K, V, &'a LinkedHashMap<K, V>)>,
 }
 
-/// The `CursorMut` struct and its implementation provide the basic mutable Cursor API for Linked
-/// lists as proposed in
-/// [here](https://github.com/rust-lang/rfcs/blob/master/text/2570-linked-list-cursors.md), with
-/// several exceptions:
-///
-/// - It behaves similarly to Rust's Iterators, returning `None` when the end of the list is
-///   reached. A _guard_ node is positioned between the head and tail of the linked list to
-///   facilitate this. If the cursor is over this guard node, `None` is returned, signaling the end
-///   or start of the list. From this position, the cursor can move in either direction as the
-///   linked list is circular, with the guard node connecting the two ends.
-/// - The current implementation does not include an `index` method, as it does not track the index
-///   of its elements. It provides access to each map entry as a tuple of `(&K, &mut V)`.
-///
-pub struct CursorMut<'a, K, V, S> {
-    cur: *mut Node<K, V>,
-    hash_builder: &'a S,
-    free: &'a mut Option<NonNull<Node<K, V>>>,
-    values: &'a mut Option<NonNull<Node<K, V>>>,
-    table: &'a mut hashbrown::HashTable<NonNull<Node<K, V>>>,
-}
-
 impl<K, V> IterMut<'_, K, V> {
     #[inline]
     pub(crate) fn iter(&self) -> Iter<'_, K, V> {
@@ -1760,6 +1739,27 @@ impl<'a, K, V> Drop for Drain<'a, K, V> {
             }
         }
     }
+}
+
+/// The `CursorMut` struct and its implementation provide the basic mutable Cursor API for Linked
+/// lists as proposed in
+/// [here](https://github.com/rust-lang/rfcs/blob/master/text/2570-linked-list-cursors.md), with
+/// several exceptions:
+///
+/// - It behaves similarly to Rust's Iterators, returning `None` when the end of the list is
+///   reached. A _guard_ node is positioned between the head and tail of the linked list to
+///   facilitate this. If the cursor is over this guard node, `None` is returned, signaling the end
+///   or start of the list. From this position, the cursor can move in either direction as the
+///   linked list is circular, with the guard node connecting the two ends.
+/// - The current implementation does not include an `index` method, as it does not track the index
+///   of its elements. It provides access to each map entry as a tuple of `(&K, &mut V)`.
+///
+pub struct CursorMut<'a, K, V, S> {
+    cur: *mut Node<K, V>,
+    hash_builder: &'a S,
+    free: &'a mut Option<NonNull<Node<K, V>>>,
+    values: &'a mut Option<NonNull<Node<K, V>>>,
+    table: &'a mut hashbrown::HashTable<NonNull<Node<K, V>>>,
 }
 
 impl<'a, K, V, S> CursorMut<'a, K, V, S> {
