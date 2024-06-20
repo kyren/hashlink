@@ -14,12 +14,19 @@ pub use crate::linked_hash_map::{
     RawOccupiedEntryMut, RawVacantEntryMut, VacantEntry,
 };
 
-pub struct LruCache<K, V, S = hash_map::DefaultHashBuilder> {
-    map: LinkedHashMap<K, V, S>,
-    max_size: usize,
+pub struct LruCache<K, V, S = hash_map::DefaultHashBuilder>
+where
+    K: Eq + Hash,
+    S: BuildHasher + Default,
+{
+    pub(crate) map: LinkedHashMap<K, V, S>,
+    pub(crate) max_size: usize,
 }
 
-impl<K: Eq + Hash, V> LruCache<K, V> {
+impl<K, V> LruCache<K, V>
+where
+    K: Eq + Hash,
+{
     #[inline]
     pub fn new(capacity: usize) -> Self {
         LruCache {
@@ -37,7 +44,31 @@ impl<K: Eq + Hash, V> LruCache<K, V> {
     }
 }
 
-impl<K, V, S> LruCache<K, V, S> {
+impl<K, V, S> PartialEq for LruCache<K, V, S>
+where
+    K: Eq + Hash,
+    V: Eq,
+    S: BuildHasher + Default,
+{
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.len() == other.len() && self.capacity() == other.capacity() && self.iter().eq(other)
+    }
+}
+
+impl<K, V, S> Eq for LruCache<K, V, S>
+where
+    K: Eq + Hash,
+    V: Eq,
+    S: BuildHasher + Default,
+{
+}
+
+impl<K, V, S> LruCache<K, V, S>
+where
+    K: Eq + Hash,
+    S: BuildHasher + Default,
+{
     #[inline]
     pub fn with_hasher(capacity: usize, hash_builder: S) -> Self {
         LruCache {
@@ -82,9 +113,10 @@ impl<K, V, S> LruCache<K, V, S> {
     }
 }
 
-impl<K: Eq + Hash, V, S> LruCache<K, V, S>
+impl<K, V, S> LruCache<K, V, S>
 where
-    S: BuildHasher,
+    K: Eq + Hash,
+    S: BuildHasher + Default,
 {
     #[inline]
     pub fn contains_key<Q>(&self, key: &Q) -> bool
@@ -103,6 +135,26 @@ where
         let old_val = self.map.insert(k, v);
         if self.len() > self.capacity() {
             self.remove_lru();
+        }
+        old_val
+    }
+
+    /// Insert a new value into the `LruCache` with LRU callback.
+    ///
+    /// If necessary, will remove the value at the front of the LRU list to make room.
+    /// Calls a callback if there was an LRU removed value
+    #[inline]
+    pub fn insert_with_callback<F: FnOnce(K, V)>(
+        &mut self,
+        k: K,
+        v: V,
+        remove_lru_callback: F,
+    ) -> Option<V> {
+        let old_val = self.map.insert(k, v);
+        if self.len() > self.capacity() {
+            if let Some(x) = self.remove_lru() {
+                remove_lru_callback(x.0, x.1)
+            }
         }
         old_val
     }
@@ -171,6 +223,29 @@ where
         self.map.entry(key)
     }
 
+    /// Like `entry` but with LRU callback.
+    /// If the returned entry is vacant, it will always have room to insert a single value.  By
+    /// using the entry API, you can exceed the configured capacity by 1.
+    ///
+    /// The returned entry is not automatically moved to the back of the LRU list.  By calling
+    /// `Entry::to_back` / `Entry::to_front` you can manually control the position of this entry in
+    /// the LRU list.
+    /// Calls a callback if there was an LRU removed value
+
+    #[inline]
+    pub fn entry_with_callback<F: FnOnce(K, V)>(
+        &mut self,
+        key: K,
+        remove_lru_callback: F,
+    ) -> Entry<'_, K, V, S> {
+        if self.len() > self.capacity() {
+            if let Some(x) = self.remove_lru() {
+                remove_lru_callback(x.0, x.1)
+            }
+        }
+        self.map.entry(key)
+    }
+
     /// The constructed raw entry is never automatically moved to the back of the LRU list.  By
     /// calling `Entry::to_back` / `Entry::to_front` you can manually control the position of this
     /// entry in the LRU list.
@@ -185,10 +260,32 @@ where
     /// The constructed raw entry is never automatically moved to the back of the LRU list.  By
     /// calling `Entry::to_back` / `Entry::to_front` you can manually control the position of this
     /// entry in the LRU list.
+    /// Calls a callback if there was an LRU removed value
+
     #[inline]
     pub fn raw_entry_mut(&mut self) -> RawEntryBuilderMut<'_, K, V, S> {
         if self.len() > self.capacity() {
             self.remove_lru();
+        }
+        self.map.raw_entry_mut()
+    }
+
+    /// Like `raw_entry` but with LRU callback.
+    /// If the constructed raw entry is vacant, it will always have room to insert a single value.
+    /// By using the raw entry API, you can exceed the configured capacity by 1.
+    ///
+    /// The constructed raw entry is never automatically moved to the back of the LRU list.  By
+    /// calling `Entry::to_back` / `Entry::to_front` you can manually control the position of this
+    /// entry in the LRU list.
+    #[inline]
+    pub fn raw_entry_mut_with_callback<F: FnOnce(K, V)>(
+        &mut self,
+        remove_lru_callback: F,
+    ) -> RawEntryBuilderMut<'_, K, V, S> {
+        if self.len() > self.capacity() {
+            if let Some(x) = self.remove_lru() {
+                remove_lru_callback(x.0, x.1)
+            }
         }
         self.map.raw_entry_mut()
     }
@@ -223,6 +320,26 @@ where
         self.max_size = capacity;
     }
 
+    /// Like `set_capacity` but with LRU callback.
+    /// Set the new cache capacity for the `LruCache` with an LRU callback.
+    ///
+    /// If there are more entries in the `LruCache` than the new capacity will allow, they are
+    /// removed.
+    /// Calls a callback if there was an LRU removed value
+    #[inline]
+    pub fn set_capacity_with_callback<F: Fn(K, V)>(
+        &mut self,
+        capacity: usize,
+        remove_lru_callback: F,
+    ) {
+        for _ in capacity..self.len() {
+            if let Some(x) = self.remove_lru() {
+                remove_lru_callback(x.0, x.1)
+            }
+        }
+        self.max_size = capacity;
+    }
+
     /// Remove the least recently used entry and return it.
     ///
     /// If the `LruCache` is empty this will return None.
@@ -230,9 +347,17 @@ where
     pub fn remove_lru(&mut self) -> Option<(K, V)> {
         self.map.pop_front()
     }
+
+    /// Peek at the least recently used entry and return a reference to it.
+    ///
+    /// If the `LruCache` is empty this will return None.
+    #[inline]
+    pub fn peek_lru(&mut self) -> Option<(&K, &V)> {
+        self.map.front()
+    }
 }
 
-impl<K: Hash + Eq + Clone, V: Clone, S: BuildHasher + Clone> Clone for LruCache<K, V, S> {
+impl<K: Hash + Eq + Clone, V: Clone, S: BuildHasher + Default + Clone> Clone for LruCache<K, V, S> {
     #[inline]
     fn clone(&self) -> Self {
         LruCache {
@@ -242,16 +367,24 @@ impl<K: Hash + Eq + Clone, V: Clone, S: BuildHasher + Clone> Clone for LruCache<
     }
 }
 
-impl<K: Eq + Hash, V, S: BuildHasher> Extend<(K, V)> for LruCache<K, V, S> {
+impl<K: Eq + Hash, V, S: BuildHasher + Default> Extend<(K, V)> for LruCache<K, V, S> {
     #[inline]
     fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
         for (k, v) in iter {
-            self.insert(k, v);
+            //self.insert(k, v);
+            self.map.insert(k, v);
+            if self.len() > self.capacity() {
+                self.remove_lru();
+            }
         }
     }
 }
 
-impl<K, V, S> IntoIterator for LruCache<K, V, S> {
+impl<K, V, S> IntoIterator for LruCache<K, V, S>
+where
+    K: Eq + Hash,
+    S: BuildHasher + Default,
+{
     type Item = (K, V);
     type IntoIter = IntoIter<K, V>;
 
@@ -261,7 +394,11 @@ impl<K, V, S> IntoIterator for LruCache<K, V, S> {
     }
 }
 
-impl<'a, K, V, S> IntoIterator for &'a LruCache<K, V, S> {
+impl<'a, K, V, S> IntoIterator for &'a LruCache<K, V, S>
+where
+    K: Eq + Hash,
+    S: BuildHasher + Default,
+{
     type Item = (&'a K, &'a V);
     type IntoIter = Iter<'a, K, V>;
 
@@ -271,7 +408,11 @@ impl<'a, K, V, S> IntoIterator for &'a LruCache<K, V, S> {
     }
 }
 
-impl<'a, K, V, S> IntoIterator for &'a mut LruCache<K, V, S> {
+impl<'a, K, V, S> IntoIterator for &'a mut LruCache<K, V, S>
+where
+    K: Eq + Hash,
+    S: BuildHasher + Default,
+{
     type Item = (&'a K, &'a mut V);
     type IntoIter = IterMut<'a, K, V>;
 
@@ -283,8 +424,9 @@ impl<'a, K, V, S> IntoIterator for &'a mut LruCache<K, V, S> {
 
 impl<K, V, S> fmt::Debug for LruCache<K, V, S>
 where
-    K: fmt::Debug,
+    K: Eq + Hash + fmt::Debug,
     V: fmt::Debug,
+    S: BuildHasher + Default,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_map().entries(self.iter().rev()).finish()
