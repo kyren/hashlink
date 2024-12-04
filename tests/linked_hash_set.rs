@@ -344,9 +344,7 @@ fn test_drain() {
             assert_eq!(last_i, 49);
         }
 
-        for _ in &s {
-            panic!("s should be empty!");
-        }
+        assert_eq!((&s).into_iter().count(), 0);
 
         s.extend(1..100);
     }
@@ -493,7 +491,6 @@ fn double_ended_iter() {
     assert_eq!(iter.next_back(), None);
     assert_eq!(iter.next(), None);
     assert_eq!(iter.next_back(), None);
-    drop(iter);
 
     let mut iter = set.drain();
     assert_eq!(iter.next(), Some(1));

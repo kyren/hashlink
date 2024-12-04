@@ -2,7 +2,6 @@ use core::{
     borrow::Borrow,
     fmt,
     hash::{BuildHasher, Hash},
-    usize,
 };
 
 use hashbrown::hash_map;
