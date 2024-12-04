@@ -4,7 +4,7 @@ use core::{
     hash::{BuildHasher, Hash},
 };
 
-use hashbrown::hash_map;
+use hashbrown::DefaultHashBuilder;
 
 use crate::linked_hash_map::{self, LinkedHashMap};
 
@@ -13,7 +13,7 @@ pub use crate::linked_hash_map::{
     RawOccupiedEntryMut, RawVacantEntryMut, VacantEntry,
 };
 
-pub struct LruCache<K, V, S = hash_map::DefaultHashBuilder> {
+pub struct LruCache<K, V, S = DefaultHashBuilder> {
     map: LinkedHashMap<K, V, S>,
     max_size: usize,
 }

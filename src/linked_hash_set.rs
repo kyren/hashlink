@@ -6,7 +6,7 @@ use core::{
     ops::{BitAnd, BitOr, BitXor, Sub},
 };
 
-use hashbrown::hash_map::DefaultHashBuilder;
+use hashbrown::DefaultHashBuilder;
 
 use crate::linked_hash_map::{self, LinkedHashMap, TryReserveError};
 

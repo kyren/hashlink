@@ -1,4 +1,4 @@
-use hashbrown::hash_map::DefaultHashBuilder;
+use hashbrown::DefaultHashBuilder;
 use hashlink::linked_hash_set::{self, LinkedHashSet};
 
 #[allow(dead_code)]

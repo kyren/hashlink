@@ -12,8 +12,8 @@ use core::{
 };
 
 use alloc::boxed::Box;
-use hashbrown::hash_map::DefaultHashBuilder;
 use hashbrown::hash_table::{self, HashTable};
+use hashbrown::DefaultHashBuilder;
 
 pub enum TryReserveError {
     CapacityOverflow,
