@@ -373,14 +373,23 @@ fn test_replace() {
         }
     }
 
+    impl Foo {
+        fn really_eq(&self, other: &Self) -> bool {
+            self.0 == other.0 && self.1 == other.1
+        }
+    }
+
     let mut s = LinkedHashSet::new();
     assert_eq!(s.replace(Foo("a", 1)), None);
     assert_eq!(s.len(), 1);
-    assert_eq!(s.replace(Foo("a", 2)), Some(Foo("a", 1)));
+    assert_eq!(
+        s.replace(Foo("a", 2)).map(|f| f.really_eq(&Foo("a", 1))),
+        Some(true)
+    );
     assert_eq!(s.len(), 1);
 
     let mut it = s.iter();
-    assert_eq!(it.next(), Some(&Foo("a", 2)));
+    assert_eq!(it.next().map(|f| f.really_eq(&Foo("a", 2))), Some(true));
     assert_eq!(it.next(), None);
 }
 
