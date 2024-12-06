@@ -29,10 +29,8 @@ impl BuildHasher for DefaultHashBuilder {
 }
 
 /// Default hasher, as selected by hashbrown.
-///
-/// Currently this is [`foldhash::fast::FoldHasher`].
 #[derive(Clone)]
-pub struct DefaultHasher(foldhash::fast::FoldHasher);
+pub struct DefaultHasher(<hashbrown::DefaultHashBuilder as BuildHasher>::Hasher);
 
 impl Hasher for DefaultHasher {
     #[inline]

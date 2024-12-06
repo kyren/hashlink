@@ -18,7 +18,6 @@ circle-ci = { repository = "kyren/hashlink", branch = "master" }
 serde_impl = ["serde"]
 
 [dependencies]
-foldhash = { version = "0.1.3", default-features = false }
 hashbrown = { version = "0.15", default-features = false, features = ["default-hasher", "inline-more"] }
 serde = { version = "1.0", default-features = false, optional = true }
 
