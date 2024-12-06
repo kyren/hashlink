@@ -13,7 +13,8 @@ use core::{
 
 use alloc::boxed::Box;
 use hashbrown::hash_table::{self, HashTable};
-use hashbrown::DefaultHashBuilder;
+
+use crate::DefaultHashBuilder;
 
 pub enum TryReserveError {
     CapacityOverflow,

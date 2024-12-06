@@ -4,9 +4,8 @@ use core::{
     hash::{BuildHasher, Hash},
 };
 
-use hashbrown::DefaultHashBuilder;
-
 use crate::linked_hash_map::{self, LinkedHashMap};
+use crate::DefaultHashBuilder;
 
 pub use crate::linked_hash_map::{
     Drain, Entry, IntoIter, Iter, IterMut, OccupiedEntry, RawEntryBuilder, RawEntryBuilderMut,

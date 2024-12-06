@@ -1,5 +1,5 @@
-use hashbrown::DefaultHashBuilder;
 use hashlink::linked_hash_set::{self, LinkedHashSet};
+use hashlink::DefaultHashBuilder;
 
 #[allow(dead_code)]
 fn assert_covariance() {
