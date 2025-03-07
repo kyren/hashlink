@@ -973,22 +973,6 @@ where
     }
 }
 
-unsafe impl<K, V, S> Send for RawEntryBuilder<'_, K, V, S>
-where
-    K: Send,
-    V: Send,
-    S: Send,
-{
-}
-
-unsafe impl<K, V, S> Sync for RawEntryBuilder<'_, K, V, S>
-where
-    K: Sync,
-    V: Sync,
-    S: Sync,
-{
-}
-
 pub struct RawEntryBuilderMut<'a, K, V, S> {
     map: &'a mut LinkedHashMap<K, V, S>,
 }
@@ -1042,22 +1026,6 @@ where
             }),
         }
     }
-}
-
-unsafe impl<K, V, S> Send for RawEntryBuilderMut<'_, K, V, S>
-where
-    K: Send,
-    V: Send,
-    S: Send,
-{
-}
-
-unsafe impl<K, V, S> Sync for RawEntryBuilderMut<'_, K, V, S>
-where
-    K: Sync,
-    V: Sync,
-    S: Sync,
-{
 }
 
 pub enum RawEntryMut<'a, K, V, S> {
@@ -1447,8 +1415,8 @@ impl<K, V> Drain<'_, K, V> {
 
 unsafe impl<K, V> Send for Iter<'_, K, V>
 where
-    K: Send,
-    V: Send,
+    K: Sync,
+    V: Sync,
 {
 }
 
