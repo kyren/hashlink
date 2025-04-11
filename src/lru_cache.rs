@@ -78,6 +78,14 @@ impl<K, V, S> LruCache<K, V, S> {
     pub fn drain(&mut self) -> Drain<K, V> {
         self.map.drain()
     }
+
+    #[inline]
+    pub fn retain<F>(&mut self, f: F)
+    where
+        F: FnMut(&K, &mut V) -> bool,
+    {
+        self.map.retain(f);
+    }
 }
 
 impl<K: Eq + Hash, V, S> LruCache<K, V, S>
